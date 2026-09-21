@@ -241,6 +241,34 @@ def test_stream_sanitizes_ai_unavailable_error(client: TestClient) -> None:
     assert "openai" not in response.text.lower()
 
 
+def test_stream_sanitizes_rate_limit_error(client: TestClient) -> None:
+    """A gateway cooldown mid-stream surfaces the honest rate-limited copy.
+
+    Previously an AiRateLimitError raised during the stream (not by the
+    pre-stream limiter) fell into the generic 'unexpected error' frame,
+    misleading users into thinking the app broke rather than that the AI
+    gateway is cooling down. Regression for the autodegrade incident.
+    """
+    _override_runtime(
+        client,
+        _FailingRuntime(AiRateLimitError(retry_after_seconds=90)),
+    )
+
+    response = client.post(
+        "/api/v1/ai/agents/chat/stream",
+        json={"message": "Hello"},
+    )
+
+    assert response.status_code == 200
+    frames = _sse_events(response.text)
+    assert frames == [
+        ("error", {"message": "The AI service is rate-limited. Please try again in a moment."}),
+        ("done", {"agents": []}),
+    ]
+    # Gateway/cooldown internals must never leak into the client stream.
+    assert "cooldown" not in response.text.lower()
+
+
 def test_stream_sanitizes_unexpected_error(client: TestClient) -> None:
     _override_runtime(
         client,
