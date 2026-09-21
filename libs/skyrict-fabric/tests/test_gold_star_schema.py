@@ -101,7 +101,15 @@ class TestDimRep:
         o1 = _opp_model(owner_id=OWNER)
         o2 = _opp_model(owner_id=OWNER)  # same owner
         reps = build_dim_rep([o1, o2])
-        assert len(reps) == 1
+        # 1 real owner + 1 Unassigned sentinel for the tenant
+        assert len(reps) == 2
+        assert make_tenant_key(TID, OWNER) in reps
+    def test_unassigned_sentinel_per_tenant(self) -> None:
+        o = _opp_model(owner_id=None)
+        reps = build_dim_rep([o])
+        sentinel_key = make_tenant_key(TID, uuid.UUID("00000000-0000-0000-0000-000000000000"))
+        assert sentinel_key in reps
+        assert reps[sentinel_key].source_owner_id == uuid.UUID("00000000-0000-0000-0000-000000000000")
 
 class TestFactDeals:
     def test_won_only(self) -> None:
@@ -114,6 +122,11 @@ class TestFactDeals:
         o = _opp_model()
         facts = build_fact_deals([o], {})
         assert len(facts) == 1
+    def test_null_owner_uses_sentinel(self) -> None:
+        o = _opp_model(stage="won", owner_id=None)
+        facts = build_fact_deals([o], {})
+        sentinel_key = make_tenant_key(TID, uuid.UUID("00000000-0000-0000-0000-000000000000"))
+        assert facts[0].rep_key == sentinel_key
 
 class TestFactRevenue:
     def test_payment_aggregation(self) -> None:
@@ -140,6 +153,11 @@ class TestFactPipeline:
         facts = build_fact_pipeline([o1, o2, o3])
         assert len(facts) == 1
         assert facts[0].stage == "negotiation"
+    def test_null_owner_uses_sentinel(self) -> None:
+        o = _opp_model(stage="negotiation", owner_id=None)
+        facts = build_fact_pipeline([o])
+        sentinel_key = make_tenant_key(TID, uuid.UUID("00000000-0000-0000-0000-000000000000"))
+        assert facts[0].rep_key == sentinel_key
 
 class TestMoneyNeverFloat:
     def test_deals_money(self) -> None:

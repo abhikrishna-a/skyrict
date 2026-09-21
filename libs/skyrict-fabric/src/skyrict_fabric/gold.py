@@ -1,6 +1,8 @@
 """Silver-to-Gold star schema assembly."""
 from __future__ import annotations
 
+import uuid
+from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
@@ -23,9 +25,8 @@ from skyrict_fabric.schema import (
 from skyrict_fabric.tenant import make_date_key, make_tenant_key
 
 if TYPE_CHECKING:
-    import uuid
     from collections.abc import Sequence
-    from datetime import date, datetime
+    from datetime import date
 
 __all__ = [
     "build_dim_customer",
@@ -36,6 +37,11 @@ __all__ = [
     "build_fact_pipeline",
     "build_fact_revenue",
 ]
+
+# Sentinel for unassigned sales reps: NIL UUID as source_owner_id, so facts
+# with a NULL owner never dangle (dim_rep always contains one row per tenant).
+_UNASSIGNED = uuid.UUID("00000000-0000-0000-0000-000000000000")
+_MIN_DT = datetime.min
 
 _DAY_NAMES = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 _MONTH_NAMES = [
@@ -111,9 +117,11 @@ def build_dim_rep(
     opportunities: Sequence[SilverCrmOpportunities],
     leads: Sequence[SilverCrmLeads] | None = None,
 ) -> dict[uuid.UUID, GoldDimRep]:
-    """Unique owner_ids from opportunities and leads."""
+    """Unique owner_ids from opportunities and leads, plus one Unassigned sentinel per tenant."""
     owner_map: dict[uuid.UUID, tuple[uuid.UUID, uuid.UUID, datetime, datetime]] = {}
+    tenants: set[uuid.UUID] = set()
     for opp in opportunities:
+        tenants.add(opp.tenant_id)
         if opp.owner_id is None:
             continue
         tid = opp.tenant_id
@@ -125,6 +133,7 @@ def build_dim_rep(
             owner_map[key] = (tid, oid, min(first, opp.created_at), max(last, opp.updated_at))
     if leads:
         for lead in leads:
+            tenants.add(lead.tenant_id)
             if lead.owner_id is None:
                 continue
             key = make_tenant_key(lead.tenant_id, lead.owner_id)
@@ -133,6 +142,10 @@ def build_dim_rep(
             else:
                 _, oid, first, last = owner_map[key]
                 owner_map[key] = (lead.tenant_id, oid, min(first, lead.created_at), max(last, lead.updated_at))
+    for tid in tenants:
+        sentinel_key = make_tenant_key(tid, _UNASSIGNED)
+        if sentinel_key not in owner_map:
+            owner_map[sentinel_key] = (tid, _UNASSIGNED, _MIN_DT, _MIN_DT)
     return {
         rep_key: GoldDimRep(
             rep_key=rep_key, tenant_id=tid,
@@ -160,7 +173,7 @@ def build_fact_deals(
             continue
         deal_key = make_tenant_key(opp.tenant_id, opp.id)
         customer_key = opp_to_cust.get(opp.id)
-        rep_key = make_tenant_key(opp.tenant_id, opp.owner_id) if opp.owner_id else None
+        rep_key = make_tenant_key(opp.tenant_id, opp.owner_id) if opp.owner_id else make_tenant_key(opp.tenant_id, _UNASSIGNED)
         won_date_key = make_date_key(opp.won_at) if opp.won_at else None
         created_date_key = make_date_key(opp.created_at)
         ls = lead_source.get(opp.lead_id) if opp.lead_id else None
@@ -217,7 +230,7 @@ def build_fact_pipeline(
     for opp in opportunities:
         if opp.stage in _TERMINAL_STAGES:
             continue
-        rep_key = make_tenant_key(opp.tenant_id, opp.owner_id) if opp.owner_id else None
+        rep_key = make_tenant_key(opp.tenant_id, opp.owner_id) if opp.owner_id else make_tenant_key(opp.tenant_id, _UNASSIGNED)
         facts.append(GoldFactPipeline(
             pipeline_key=make_tenant_key(opp.tenant_id, opp.id),
             tenant_id=opp.tenant_id,
