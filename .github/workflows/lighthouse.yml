@@ -154,10 +154,18 @@ jobs:
           E2E_BASE_URL: "http://default.localhost:3000"
           E2E_ADMIN_EMAIL: "admin@skyrict.io"
           E2E_ADMIN_PASSWORD: "Admin123!"
-          # Fresh compose volumes every run take the enrollment path, so no
-          # TOTP secret is normally needed; set it when a persistent stack
-          # runs the audit against an already-enrolled admin.
+          # Fresh compose volumes every run take the enrollment path; the
+          # script reuses THAT run's secret for later URLs, so a stale
+          # E2E_TOTP_SECRET cannot break the challenge arm. The env value is
+          # only consulted when auditing a persistent stack against an
+          # already-enrolled admin (no this-run enrollment exists).
           E2E_TOTP_SECRET: "${{ secrets.E2E_TOTP_SECRET }}"
+          # Whole-login budget (TOTP re-attempts + workspace settle). Login is
+          # harness setup, never measured, so it is generous: 20s is too tight
+          # for a cold, loaded runner. On failure, screenshots + HTML
+          # snapshots are written under scripts/perf/lighthouse-results/debug/
+          # and uploaded with the results artifact below.
+          E2E_LOGIN_TIMEOUT_MS: "60000"
 
       # ---- Artifacts -------------------------------------------------------
       - name: Upload Lighthouse results
