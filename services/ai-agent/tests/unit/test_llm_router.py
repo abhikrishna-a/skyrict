@@ -7,6 +7,7 @@ import pytest
 from ai_agent.core.exceptions import (
     AiDataResidencyError,
     AiInvalidResponseError,
+    AiRateLimitError,
     AiUnavailableError,
 )
 from ai_agent.core.llm_router import LlmRouter
@@ -132,6 +133,53 @@ class TestDataResidency:
 
         with pytest.raises(AiUnavailableError):
             await router.complete(_REQUEST, require_local_only=True)
+
+
+class TestRateLimit:
+    async def test_rate_limit_propagates_without_failover(self) -> None:
+        """429 is a slow-down signal, not an outage: the fallback must not burn
+        its quota on the same gateway-wide cooldown. The typed error with its
+        retry_after_seconds must reach the caller unchanged."""
+        primary = FakeProvider("primary", [AiRateLimitError(retry_after_seconds=30)])
+        fallback = FakeProvider("fallback", ["should-not-run"])
+        router = LlmRouter([primary, fallback])
+
+        with pytest.raises(AiRateLimitError) as exc_info:
+            await router.complete(_REQUEST)
+
+        assert exc_info.value.retry_after_seconds == 30
+        assert primary.calls == 1
+        assert fallback.calls == 0
+
+    async def test_stream_rate_limit_propagates_without_failover(self) -> None:
+        """Same no-failover rule on the streaming path, before first token."""
+        primary = FakeStreamProvider("primary", [AiRateLimitError(retry_after_seconds=30)])
+        fallback = FakeStreamProvider("fallback", ["never"])
+        router = LlmRouter([primary, fallback])
+
+        with pytest.raises(AiRateLimitError) as exc_info:
+            _ = [c async for c in router.stream(_REQUEST)]
+
+        assert exc_info.value.retry_after_seconds == 30
+        assert primary.calls == 1
+        assert fallback.calls == 0
+
+    async def test_stream_rate_limit_mid_stream_propagates_as_typed_error(self) -> None:
+        """Even mid-stream a cooldown surfaces as the typed 429 error, not a
+        misleading 503 - and never triggers a (pointless) failover."""
+
+        class MidStreamRateLimited(FakeStreamProvider):
+            async def stream(self, request: LlmRequest):
+                self.calls += 1
+                yield LlmStreamChunk(token_delta="tok", model_used=self.model)
+                raise AiRateLimitError(retry_after_seconds=15)
+
+        router = LlmRouter([MidStreamRateLimited("primary", [])])
+
+        with pytest.raises(AiRateLimitError) as exc_info:
+            _ = [c async for c in router.stream(_REQUEST)]
+
+        assert exc_info.value.retry_after_seconds == 15
 
 
 class TestFlags:

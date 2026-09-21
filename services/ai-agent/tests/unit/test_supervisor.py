@@ -13,7 +13,9 @@ import uuid
 from decimal import Decimal
 from types import SimpleNamespace
 
-from ai_agent.core.exceptions import AiUnavailableError
+import pytest
+
+from ai_agent.core.exceptions import AiRateLimitError, AiUnavailableError
 from ai_agent.core.providers import LlmCompletion, LlmRequest
 from ai_agent.core.providers.base import LlmStreamChunk
 from ai_agent.features.nl_query.gateway import ProductRef, StockLevelRow
@@ -348,6 +350,26 @@ async def test_classify_keyword_fallback_when_provider_unavailable() -> None:
     assert decision.reason == "keyword_fallback"
 
 
+async def test_classify_rate_limit_propagates_not_keyword_fallback() -> None:
+    """A classifier 429 must NOT hide behind keyword routing.
+
+    Unavailability falls back to keywords because routing is free; a rate
+    limit is different - the follow-up delegate call would hit the same
+    gateway-wide cooldown and the user would never learn the honest cause.
+    The typed error must propagate with its retry_after_seconds intact.
+    """
+    router = FakeLlmRouter(
+        has_providers=True,
+        completion_text=AiRateLimitError(retry_after_seconds=30),
+    )
+    service = make_service(router=router)
+
+    with pytest.raises(AiRateLimitError) as exc_info:
+        await service.classify("blah blah")
+
+    assert exc_info.value.retry_after_seconds == 30
+
+
 async def test_classify_strips_markdown_fences() -> None:
     router = FakeLlmRouter(
         has_providers=True,
@@ -525,6 +547,41 @@ async def test_stream_delegate_failure_degrades_not_raises() -> None:
     assert "temporarily unavailable" in tokens_text(events, "hr_copilot")
     done = [e for e in events if isinstance(e, DoneEvent)]
     assert len(done) == 1
+
+
+async def test_stream_delegate_rate_limit_yields_honest_text() -> None:
+    """A delegate hitting the gateway cooldown streams the rate-limited copy,
+    not the generic unavailable copy - the condition is transient and retryable."""
+    router = FakeLlmRouter(
+        has_providers=True,
+        completion_text=json.dumps({"agents": ["hr_copilot"], "confidence": 0.9}),
+    )
+    hr_copilot = FakeHrCopilot(error=AiRateLimitError(retry_after_seconds=45))
+    service = make_service(router=router, hr_copilot=hr_copilot)
+
+    events = await collect(service, query="Leave policy")
+
+    assert "rate-limited" in tokens_text(events, "hr_copilot")
+    assert "temporarily unavailable" not in tokens_text(events, "hr_copilot")
+    done = [e for e in events if isinstance(e, DoneEvent)]
+    assert len(done) == 1
+
+
+async def test_stream_supervisor_answer_rate_limited_yields_honest_text() -> None:
+    """Abstain-path (supervisor answer) rate limit -> the rate-limited copy."""
+    router = FakeLlmRouter(
+        has_providers=True,
+        completion_text=[
+            json.dumps({"agents": [], "confidence": 0.0}),
+            AiRateLimitError(retry_after_seconds=45),
+        ],
+    )
+    service = make_service(router=router)
+
+    events = await collect(service, query="something that needs a supervisor answer")
+
+    assert "rate-limited" in tokens_text(events, "supervisor")
+    assert router.complete_calls == 2  # one classifier + one supervisor answer
 
 
 # --- Sales Coach + Audit Guardian delegates (SKY-90) -------------------------

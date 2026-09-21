@@ -13,6 +13,10 @@ use to reach an LLM, because it owns three cross-cutting contracts:
      genuinely could not complete; 502 would imply it tried and only got
      unusable answers)
    - no provider configured at all                     -> 503
+   - any provider rate-limited (429 / cooldown body)   -> 429 AiRateLimitError,
+     raised IMMEDIATELY with no failover: a cooldown is gateway-wide, so
+     falling back would burn the next provider's quota on the same cooldown
+     (and the honest retry_after would be lost).
 3. Data residency: when a prompt carries local-only data
    (``require_local_only=True``), only providers flagged ``local_only`` are
    eligible; with none eligible the request fails closed as 422
@@ -31,6 +35,7 @@ import structlog
 from ai_agent.core.exceptions import (
     AiDataResidencyError,
     AiInvalidResponseError,
+    AiRateLimitError,
     AiUnavailableError,
 )
 from ai_agent.core.providers.base import LlmRequest
@@ -94,6 +99,10 @@ class LlmRouter:
 
         Raises:
             AiDataResidencyError: Local-only data but no cleared provider.
+            AiRateLimitError: A provider is rate-limited/cooling down (429 or
+                rate-limit body). Raised immediately - NO failover: a cooldown
+                is gateway-wide, and burning the fallback's quota on the same
+                cooldown would be worse than surfacing the honest 429.
             AiUnavailableError: No eligible provider served the request.
             AiInvalidResponseError: All eligible providers answered unusably.
         """
@@ -137,6 +146,19 @@ class LlmRouter:
                     provider=provider.name,
                     model=provider.model,
                 )
+            except AiRateLimitError as exc:
+                # A rate limit is NOT a provider outage: the gateway is cooling
+                # this model family down, and failing over would just burn the
+                # next provider's quota on the same cooldown. Propagate the
+                # typed error so the caller surfaces an honest 429/retry-after
+                # instead of a misleading 503.
+                logger.warning(
+                    "llm_router.rate_limited",
+                    provider=provider.name,
+                    model=provider.model,
+                    retry_after_seconds=exc.retry_after_seconds,
+                )
+                raise
             except AiUnavailableError:
                 saw_unavailable = True
                 logger.warning(
@@ -177,6 +199,9 @@ class LlmRouter:
 
         Raises (on iteration, before any yield unless noted):
             AiDataResidencyError: Local-only data but no cleared provider.
+            AiRateLimitError: A provider is rate-limited/cooling down. Raised
+                immediately, before the first token OR mid-stream - never
+                failover across a cooldown.
             AiUnavailableError: No eligible provider served the request.
             AiInvalidResponseError: Every eligible provider answered unusably.
         """
@@ -230,6 +255,17 @@ class LlmRouter:
                 )
                 if started:
                     raise
+            except AiRateLimitError as exc:
+                # Same rule as complete(): never fail over across a cooldown,
+                # even before the first token - raise immediately so the
+                # caller maps it to the honest rate-limit frame.
+                logger.warning(
+                    "llm_router.rate_limited_stream",
+                    provider=provider.name,
+                    model=provider.model,
+                    retry_after_seconds=exc.retry_after_seconds,
+                )
+                raise
             except AiUnavailableError:
                 saw_unavailable = True
                 logger.warning(

@@ -62,6 +62,11 @@ That agent is temporarily unavailable. Please try again shortly.
 """.strip()
 
 
+RATE_LIMITED = """
+The AI service is rate-limited right now. Please try again in a moment.
+""".strip()
+
+
 def not_provisioned_message(display_name: str) -> str:
     return (
         f"The {display_name} module is not provisioned for this workspace yet. "

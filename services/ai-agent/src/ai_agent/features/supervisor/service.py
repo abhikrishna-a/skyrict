@@ -32,7 +32,7 @@ from ai_agent.cache.response_cache import (
     classification_cache_key,
     response_cache_key,
 )
-from ai_agent.core.exceptions import AiUnavailableError
+from ai_agent.core.exceptions import AiRateLimitError, AiUnavailableError
 from ai_agent.features.attachments.processor import ProcessedAttachments, process_attachments
 from ai_agent.features.conversation_summary import ConversationSummaryStore, is_summary_fresh
 from ai_agent.features.memory_compaction.budget import ContextBudgetManager
@@ -56,6 +56,7 @@ from ai_agent.features.supervisor.prompts import (
     CLASSIFY_SYSTEM_PROMPT,
     DEGRADED,
     GREETING,
+    RATE_LIMITED,
     SUPERVISOR_SYSTEM_PROMPT,
     not_provisioned_message,
 )
@@ -362,6 +363,17 @@ class SupervisorService:
             except AiUnavailableError as exc:
                 logger.warning("supervisor.classifier_unavailable", error=str(exc))
                 return _keyword_route(query)
+            except AiRateLimitError as exc:
+                # A classifier rate limit must NOT silently degrade to keyword
+                # routing: the follow-up delegate call would hit the same
+                # gateway-wide cooldown, and the user would never learn the
+                # honest cause. Propagate so the turn surfaces the typed
+                # rate-limit frame.
+                logger.warning(
+                    "supervisor.classifier_rate_limited",
+                    retry_after_seconds=exc.retry_after_seconds,
+                )
+                raise
             try:
                 agents, confidence = _parse_classification(completion.text)
                 break
@@ -555,6 +567,14 @@ class SupervisorService:
                 logger.warning("supervisor.delegate_unavailable", agent=agent, error=str(exc))
                 for event in _yield_text(agent=agent, text=DEGRADED):
                     yield event
+            except AiRateLimitError as exc:
+                logger.warning(
+                    "supervisor.delegate_rate_limited",
+                    agent=agent,
+                    retry_after_seconds=exc.retry_after_seconds,
+                )
+                for event in _yield_text(agent=agent, text=RATE_LIMITED):
+                    yield event
             # Per-segment latency span (SKY-100 follow-up): with the keyword
             # fast path the delegate is the only LLM call on a routed turn -
             # this span attributes any residual first-token/total gap to the
@@ -632,6 +652,14 @@ class SupervisorService:
         except AiUnavailableError as exc:
             logger.warning("supervisor.answer_unavailable", error=str(exc))
             for event in _yield_text(agent="supervisor", text=DEGRADED):
+                yield event
+            return
+        except AiRateLimitError as exc:
+            logger.warning(
+                "supervisor.answer_rate_limited",
+                retry_after_seconds=exc.retry_after_seconds,
+            )
+            for event in _yield_text(agent="supervisor", text=RATE_LIMITED):
                 yield event
             return
         text = (completion.text or "").strip()
