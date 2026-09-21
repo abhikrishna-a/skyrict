@@ -231,7 +231,6 @@ export async function streamAgentChat(
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
-    let lastEventTime = Date.now();
     const STREAM_TIMEOUT_MS = 60_000; // 60s without any SSE frame = stuck
     try {
         for (;;) {
@@ -262,7 +261,6 @@ export async function streamAgentChat(
                 value: Uint8Array | undefined;
             };
             if (done) break;
-            lastEventTime = Date.now();
             buffer += decoder.decode(value, { stream: true });
             const { frames, remainder } = splitSseFrames(buffer);
             buffer = remainder;

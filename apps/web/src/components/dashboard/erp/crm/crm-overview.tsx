@@ -379,10 +379,7 @@ export function CrmOverview() {
                             </p>
                         </div>
                         {/* Mini sparkline from byStatus */}
-                        <LeadSparkline
-                            byStatus={leads.byStatus}
-                            total={leads.total}
-                        />
+                        <LeadSparkline byStatus={leads.byStatus} />
                     </div>
                     {/* Bottom: status dot legend */}
                     {leads.total > 0 && (
@@ -1048,10 +1045,8 @@ const STATUS_ORDER = ["new", "contacted", "qualified", "disqualified"] as const;
 
 function LeadSparkline({
     byStatus,
-    total,
 }: {
     byStatus: { status: string; count: number }[];
-    total: number;
 }) {
     const values = STATUS_ORDER.map(
         (s) => byStatus.find((b) => b.status === s)?.count ?? 0,

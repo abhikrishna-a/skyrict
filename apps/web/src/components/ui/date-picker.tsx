@@ -180,7 +180,6 @@ export function DatePicker({
             window.removeEventListener("scroll", onReposition, true);
             window.removeEventListener("resize", onReposition);
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [open]);
 
     function openPanel() {
