@@ -83,7 +83,9 @@ class TestGenerator:
         captcha = generate_captcha(style=style)
         image = Image.open(io.BytesIO(captcha.image_png)).convert("RGB")
         assert image.size == (CAPTCHA_WIDTH, CAPTCHA_HEIGHT)
-        pixels = list(image.getdata())
+        # getdata() is deprecated in Pillow 12 (removed in 14); get_flattened_data
+        # is the supported replacement and yields the same pixel sequence.
+        pixels = list(image.get_flattened_data())
         assert all(r == g == b for r, g, b in pixels), f"{style} contains color pixels"
 
     def test_render_varies_between_challenges_of_same_style(self) -> None:
@@ -95,7 +97,7 @@ class TestGenerator:
     def test_background_is_not_blank(self) -> None:
         captcha = generate_captcha(style="classic")
         image = Image.open(io.BytesIO(captcha.image_png)).convert("L")
-        assert len(set(image.getdata())) >= 5
+        assert len(set(image.get_flattened_data())) >= 5
 
     def test_font_manager_falls_back_without_bundled_fonts(self, tmp_path) -> None:
         manager = FontManager(fonts_dir=tmp_path)
