@@ -362,7 +362,9 @@ export const MessageBubble = memo(function MessageBubble({
                             : null,
                     )}
                 >
-                    {message.agentName && !isUser ? (
+                    {message.agentName &&
+                    !isUser &&
+                    message.agentName.toLowerCase() !== "supervisor" ? (
                         <p className="mb-1 text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
                             {message.agentName}
                         </p>

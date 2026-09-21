@@ -1,7 +1,7 @@
 "use client";
 
 import { Spinner } from "@/components/ui/spinner";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     ArrowUp,
     FileText,
@@ -158,10 +158,52 @@ export function ChatComposer({
     const [sending, setSending] = useState(false);
     const [attachments, setAttachments] = useState<ChatAttachment[]>([]);
     const [dragging, setDragging] = useState(false);
+    /** The single-row input has grown past one line (see resizeTextarea). */
+    const [grown, setGrown] = useState(false);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const containerRef = useRef<HTMLDivElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
     const folderInputRef = useRef<HTMLInputElement>(null);
     const dragCounterRef = useRef(0);
+
+    /**
+     * Auto-grow the active textarea with its content: keep the single-line
+     * minimum height, grow up to the max-h-80 cap, then scroll internally.
+     * Height is reset to "auto" first so scrollHeight measures the true
+     * content height rather than the previously grown height. `grown` flips the
+     * single-row composer to its multi-line shape once the content wraps (the
+     * one-line input is 32px = min-h-8 with `py-1.5 leading-5`).
+     *
+     * `grown` is sticky until the composer is cleared: the roomier multi-line
+     * shape fits one more line than the compact one, so re-measuring inside it
+     * (and collapsing again) would flip the layout back and forth forever for
+     * any text that only wraps because of the compact shape's action gutters.
+     */
+    const resizeTextarea = useCallback(() => {
+        const textarea = textareaRef.current;
+        if (!textarea) return;
+        textarea.style.height = "auto";
+        const sh = textarea.scrollHeight;
+        textarea.style.height = `${sh}px`;
+        const empty = textarea.value.trim() === "";
+        setGrown((previous) => (empty ? false : previous || sh > 32));
+    }, []);
+
+    /* Resize whenever the value changes (typing, paste, reset on send) and
+       re-measure after the layout switch, which changes the input's padding. */
+    useEffect(() => {
+        resizeTextarea();
+    }, [value, grown, resizeTextarea]);
+
+    /* Re-measure when the composer's rendered width changes (window resize,
+       sidebar collapse, …) so wrapped lines stay in sync. */
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!container || typeof ResizeObserver === "undefined") return;
+        const observer = new ResizeObserver(() => resizeTextarea());
+        observer.observe(container);
+        return () => observer.disconnect();
+    }, [resizeTextarea]);
 
     const addFiles = useCallback((files: FileList | File[]) => {
         const incoming = Array.from(files).map(fileToAttachment);
@@ -308,6 +350,7 @@ export function ChatComposer({
 
     return (
         <div
+            ref={containerRef}
             className="mx-auto w-full max-w-[44rem]"
             onDragEnter={handleDragEnter}
             onDragLeave={handleDragLeave}
@@ -366,9 +409,18 @@ export function ChatComposer({
                 ) : null}
 
                 {singleRow ? (
-                    /* Running-chat composer: attach, input, and send on ONE row. */
-                    <div className="flex items-center gap-1">
-                        {attachMenu}
+                    /* Running-chat composer. One line: attach, input and send
+                       share the row - the input spans the full bubble width so
+                       its scrollbar sits at the bubble's right edge, while the
+                       +/send actions float over its bottom corners. (The input
+                       is `block`: as an inline-block it sat on the row's text
+                       baseline, which reserved the parent font's descender
+                       under it, padding the row's bottom and pushing both
+                       actions down.)
+                       Grown (content wraps): the input drops its 40px action
+                       gutters and the actions move onto their own row below it,
+                       so the text aligns with the bubble's left edge. */
+                    <div className="relative">
                         <textarea
                             ref={textareaRef}
                             value={value}
@@ -377,9 +429,30 @@ export function ChatComposer({
                             rows={1}
                             placeholder={placeholder}
                             aria-label="Message"
-                            className="max-h-40 min-h-8 min-w-0 flex-1 resize-none bg-transparent px-1 py-1 text-base text-foreground outline-none placeholder:text-muted-foreground/80"
+                            className={cn(
+                                "block max-h-80 min-h-8 w-full resize-none overflow-y-auto bg-transparent py-1.5 text-[15px] leading-5 text-foreground outline-none placeholder:text-muted-foreground/80",
+                                grown ? "px-2.5" : "pl-10 pr-10",
+                            )}
                         />
-                        {sendButton}
+                        {grown ? (
+                            <div className="mt-1.5 flex items-center justify-between">
+                                <div className="flex items-center gap-1">
+                                    {attachMenu}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    {sendButton}
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                <div className="absolute bottom-0 left-0">
+                                    {attachMenu}
+                                </div>
+                                <div className="absolute bottom-0 right-0">
+                                    {sendButton}
+                                </div>
+                            </>
+                        )}
                     </div>
                 ) : (
                     <>
@@ -391,7 +464,7 @@ export function ChatComposer({
                             rows={1}
                             placeholder={placeholder}
                             aria-label="Message"
-                            className="max-h-40 min-h-10 w-full resize-none bg-transparent px-2.5 py-1 text-sm text-foreground outline-none placeholder:text-muted-foreground/80"
+                            className="max-h-60 min-h-10 w-full resize-none overflow-y-auto bg-transparent px-2.5 py-1 text-sm text-foreground outline-none placeholder:text-muted-foreground/80"
                         />
                         <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1">
