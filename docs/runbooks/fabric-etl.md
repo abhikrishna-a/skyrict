@@ -1,4 +1,4 @@
-# Runbook: Fabric Medallion — Silver & Gold (SKY-118)
+# Runbook: Fabric ETL — Silver & Gold (SKY-118)
 
 Operational guide for the Bronze → Silver → Gold medallion transforms in
 `libs/skyrict-fabric`. Covers the Silver transforms, the Gold star schema,
@@ -122,3 +122,20 @@ assembles the Gold tables from it. Expected totals:
 - Every money column carries a sibling currency column; `coalesce_currency`
   defaults missing currencies to `USD`.
 - Never sum across currencies — group by currency first (see Reconciliation).
+
+## Data skew & drift (documented)
+
+Known skew in the canonical seed and how the transforms handle it:
+
+| Skew | Where | Handling |
+| --- | --- | --- |
+| NULL `owner_id` on opportunities | `silver_crm_opportunities` | Mapped to the Unassigned sentinel rep (NIL UUID) in `dim_rep` + facts — facts never dangle |
+| Inactive customers | `silver_crm_customers.is_active = false` | Kept in `dim_customer` (SCD-1 latest wins); BI must filter `is_active` if needed |
+| Multi-currency amounts | USD + EUR in seed | Never cross-summed; every aggregate groups by `currency_code` first |
+| Terminal stages excluded | `won`/`lost` | `fact_deals` keeps `won` only; `fact_pipeline` excludes terminal stages — a deal appears in exactly one fact |
+| Duplicate source rows | same natural key re-ingested | SCD-1 upsert: latest `updated_at` wins, same key — no fan-out, no dupes |
+| Money as float in Bronze | raw ERP payloads | `validate_money` coerces to `Decimal`; non-numeric values are rejected, never silently zeroed |
+
+Drift guard: `tests/test_parity_queries.py` fails if `parity-queries.sql`
+references a table/column missing from the DDL, or if the expected totals in
+the SQL comments diverge from `seed.expected`.

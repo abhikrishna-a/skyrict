@@ -1,0 +1,39 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Silver: Finance (SKY-118)\n",
+    "Runs the Silver transforms for the finance module group.\n",
+    "Input: Bronze JSON keyed by `erp_invoices`, `erp_payments`,\n",
+    "`erp_journal_lines`, `erp_products`, `erp_currencies`.\n",
+    "See `fabric/pipelines/silver_finance.pipeline.json`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import subprocess, sys\n",
+    "\n",
+    "BRONZE = \"/lakehouse/default/Files/bronze/finance.json\"\n",
+    "SILVER = \"/lakehouse/default/Files/silver/finance.json\"\n",
+    "\n",
+    "subprocess.run(\n",
+    "    [sys.executable, \"-m\", \"skyrict_fabric\", \"silver-clean\", BRONZE, SILVER],\n",
+    "    check=True,\n",
+    ")"
+   ]
+  }
+ ],
+ "metadata": {
+  "language_info": {
+   "name": "python"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

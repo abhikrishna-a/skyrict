@@ -1,0 +1,44 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Gold: Star Schema (SKY-118)\n",
+    "Builds the Gold star schema from Silver JSON, then reconciles the\n",
+    "aggregates against the canonical seeded totals.\n",
+    "See `fabric/pipelines/gold_star_schema.pipeline.json` and\n",
+    "`fabric/samples/parity-queries.sql`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import subprocess, sys\n",
+    "\n",
+    "SILVER = \"/lakehouse/default/Files/silver/crm_sales.json\"\n",
+    "GOLD = \"/lakehouse/default/Files/gold/star_schema.json\"\n",
+    "EXPECTED = \"/lakehouse/default/Files/gold/expected.json\"\n",
+    "\n",
+    "subprocess.run(\n",
+    "    [sys.executable, \"-m\", \"skyrict_fabric\", \"gold-build\", SILVER, GOLD],\n",
+    "    check=True,\n",
+    ")\n",
+    "subprocess.run(\n",
+    "    [sys.executable, \"-m\", \"skyrict_fabric\", \"gold-reconcile\", GOLD, EXPECTED],\n",
+    "    check=True,\n",
+    ")"
+   ]
+  }
+ ],
+ "metadata": {
+  "language_info": {
+   "name": "python"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}

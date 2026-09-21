@@ -1,0 +1,39 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "metadata": {},
+   "source": [
+    "# Silver: CRM / Sales (SKY-118)\n",
+    "Runs the Silver transforms for the CRM + sales module group.\n",
+    "Input: Bronze JSON keyed by `erp_crm_leads`, `erp_crm_opportunities`,\n",
+    "`erp_crm_customers`, `erp_sales_orders`, `erp_sales_order_lines`.\n",
+    "See `fabric/pipelines/silver_crm_sales.pipeline.json`."
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import subprocess, sys\n",
+    "\n",
+    "BRONZE = \"/lakehouse/default/Files/bronze/crm_sales.json\"\n",
+    "SILVER = \"/lakehouse/default/Files/silver/crm_sales.json\"\n",
+    "\n",
+    "subprocess.run(\n",
+    "    [sys.executable, \"-m\", \"skyrict_fabric\", \"silver-clean\", BRONZE, SILVER],\n",
+    "    check=True,\n",
+    ")"
+   ]
+  }
+ ],
+ "metadata": {
+  "language_info": {
+   "name": "python"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
