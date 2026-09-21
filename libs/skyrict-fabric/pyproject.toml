@@ -90,3 +90,6 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "if __name__ == .__main__.",
 ]
+
+[tool.ruff.lint.per-file-ignores]
+"src/skyrict_fabric/schema.py" = ["TC003"]
