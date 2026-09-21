@@ -14,7 +14,12 @@ from typing import Any
 import httpx
 import pytest
 
-from ai_agent.core.exceptions import AiInvalidResponseError, AiUnavailableError, StartupError
+from ai_agent.core.exceptions import (
+    AiInvalidResponseError,
+    AiRateLimitError,
+    AiUnavailableError,
+    StartupError,
+)
 from ai_agent.core.providers import LlmRequest, OpenAiCompatibleProvider
 from ai_agent.core.providers.registry import (
     build_provider,
@@ -177,6 +182,122 @@ class TestOpenAiCompatibleProvider:
         with pytest.raises(AiUnavailableError):
             await provider.complete(_REQUEST)
 
+    async def test_http_429_model_cooldown_maps_to_rate_limit(self) -> None:
+        """OmniRoute cooldown dialect: 429 + rate_limit_error/model_cooldown + reset_seconds.
+
+        Regression for the autodegrade incident: the gateway reported
+        ``model_cooldown`` (credentials cooling down) as 429 and the adapter
+        collapsed it to AiUnavailableError with only the status logged, losing
+        the real cause and masking the transient condition as a hard outage.
+        """
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                429,
+                json={
+                    "error": {
+                        "message": "All credentials for model kgp-moonlight are cooling down",
+                        "type": "rate_limit_error",
+                        "code": "model_cooldown",
+                        "reset_seconds": 120,
+                    }
+                },
+            )
+
+        provider, _ = _make_provider(handler)
+        with pytest.raises(AiRateLimitError) as exc_info:
+            await provider.complete(_REQUEST)
+
+        assert exc_info.value.retry_after_seconds == 120
+        # Upstream detail is a log-only fact; the client-facing message stays generic.
+        assert "cooling down" not in str(exc_info.value)
+
+    async def test_http_429_retry_after_header_wins_over_body(self) -> None:
+        """A Retry-After header takes precedence over the body's reset_seconds."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                429,
+                headers={"Retry-After": "42"},
+                json={
+                    "error": {
+                        "message": "rate limited",
+                        "type": "rate_limit_error",
+                        "code": "model_cooldown",
+                        "reset_seconds": 120,
+                    }
+                },
+            )
+
+        provider, _ = _make_provider(handler)
+        with pytest.raises(AiRateLimitError) as exc_info:
+            await provider.complete(_REQUEST)
+
+        assert exc_info.value.retry_after_seconds == 42
+
+    async def test_http_date_retry_after_is_converted_to_seconds(self) -> None:
+        """Retry-After as an HTTP-date is parsed into seconds-until-retry."""
+        from datetime import UTC, datetime, timedelta
+        from email.utils import format_datetime
+
+        retry_at = datetime.now(UTC) + timedelta(seconds=90)
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                429,
+                headers={"Retry-After": format_datetime(retry_at)},
+                json={"error": {"message": "rate limited", "type": "rate_limit_error"}},
+            )
+
+        provider, _ = _make_provider(handler)
+        with pytest.raises(AiRateLimitError) as exc_info:
+            await provider.complete(_REQUEST)
+
+        assert exc_info.value.retry_after_seconds is not None
+        assert 0 < exc_info.value.retry_after_seconds <= 90
+
+    async def test_http_403_with_rate_limit_body_maps_to_rate_limit(self) -> None:
+        """Some gateways answer 403 with a rate_limit_error body - trust the
+        body signal, not just the status code."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                403,
+                json={
+                    "error": {
+                        "message": "rate limited",
+                        "type": "rate_limit_error",
+                        "code": "rate_limit_exceeded",
+                    }
+                },
+            )
+
+        provider, _ = _make_provider(handler)
+        with pytest.raises(AiRateLimitError):
+            await provider.complete(_REQUEST)
+
+    async def test_http_404_function_not_found_keeps_unavailable_with_cause(self) -> None:
+        """A permanent gateway 404 stays AiUnavailableError, chained to the
+        HTTPStatusError so the real cause is preserved for operators."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                404,
+                json={
+                    "status": 404,
+                    "title": "Not Found",
+                    "detail": "Function 'sk-multi-call': Not found for account 'abc123'",
+                },
+            )
+
+        provider, _ = _make_provider(handler)
+        with pytest.raises(AiUnavailableError) as exc_info:
+            await provider.complete(_REQUEST)
+
+        assert isinstance(exc_info.value.__cause__, httpx.HTTPStatusError)
+        # The upstream detail is a log-only fact; never in the client-facing message.
+        assert "abc123" not in str(exc_info.value)
+
     async def test_timeout_maps_to_unavailable(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
             raise httpx.ConnectTimeout("timed out")
@@ -279,6 +400,28 @@ class TestOpenAiCompatibleProviderStream:
         )
         with pytest.raises(AiUnavailableError):
             _ = [c async for c in provider.stream(_REQUEST)]
+
+    async def test_stream_429_model_cooldown_maps_to_rate_limit(self) -> None:
+        """The streaming path classifies 429/cooldown identically to complete()."""
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            return httpx.Response(
+                429,
+                json={
+                    "error": {
+                        "message": "All credentials for model kgp-moonlight are cooling down",
+                        "type": "rate_limit_error",
+                        "code": "model_cooldown",
+                        "reset_seconds": 30,
+                    }
+                },
+            )
+
+        provider, _ = _make_provider(handler)
+        with pytest.raises(AiRateLimitError) as exc_info:
+            _ = [c async for c in provider.stream(_REQUEST)]
+
+        assert exc_info.value.retry_after_seconds == 30
 
     async def test_stream_transport_error_maps_to_unavailable(self) -> None:
         provider, _ = _make_provider(
