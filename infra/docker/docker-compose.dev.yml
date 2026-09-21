@@ -57,6 +57,10 @@ services:
       # restart; without it a cold boot (~36s+, longer first time) can outlast
       # the healthcheck window and flip the container unhealthy.
       UV_CACHE_DIR: /uv-cache
+      # uvicorn --reload crashes with watchfiles "Input/output error (os error
+      # 5)" on Docker Desktop bind mounts (gRPC-FUSE inotify bug). Force
+      # polling so the dev container stays healthy instead of exiting 255.
+      WATCHFILES_FORCE_POLLING: "true"
       # Trust the Docker network so the identity service reads the real client
       # IP from X-Forwarded-For (appended by the nginx proxy) instead of
       # recording nginx's own container IP on every session. Dev-only:
@@ -138,6 +142,10 @@ services:
       # See the identity service block: persist uv's cache so the bind-mounted
       # source tree does not force a slow workspace rebuild at every start.
       UV_CACHE_DIR: /uv-cache
+      # See the identity service block: uvicorn --reload dies with watchfiles
+      # "os error 5" on Docker Desktop bind mounts; force polling to keep the
+      # container healthy.
+      WATCHFILES_FORCE_POLLING: "true"
     # Dev boot: migrate the DB before uvicorn starts so the database can never
     # silently drift behind the code (a stale upgrade head left the reports
     # permission and other tables missing, breaking generate/save). Production
@@ -191,6 +199,10 @@ services:
       # See the identity service block: persist uv's cache so the bind-mounted
       # source tree does not force a slow workspace rebuild at every start.
       UV_CACHE_DIR: /uv-cache
+      # See the identity service block: uvicorn --reload dies with watchfiles
+      # "os error 5" on Docker Desktop bind mounts; force polling to keep the
+      # container healthy.
+      WATCHFILES_FORCE_POLLING: "true"
       # --- Dev LLM chain (in-container contract, see test_compose_llm_chain_contract) ---
       # Provider/model/keys come from services/ai-agent/.env (env_file). The
       # host-oriented AI_BASE_URL there (http://localhost:20128/v1) resolves to
