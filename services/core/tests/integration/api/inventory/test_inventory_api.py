@@ -14,8 +14,8 @@ import uuid
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+import jwt
 import pytest
-from jose import jwt
 from sqlalchemy import select, text
 
 from core.core.config import settings

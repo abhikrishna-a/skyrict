@@ -8,8 +8,8 @@ import hmac
 import json
 import time
 
+import jwt
 import pytest
-from jose import jwt as jose_jwt
 
 from ai_agent.core.exceptions import TokenExpiredError, TokenInvalidError
 from ai_agent.core.security import cross_check_jwt_tenant, verify_jwt
@@ -40,7 +40,7 @@ def _make_token(
         "exp": now + expires_in,
         "type": "access",
     }
-    return jose_jwt.encode(payload, private_key, algorithm=algorithm)
+    return jwt.encode(payload, private_key, algorithm=algorithm)
 
 
 def _make_hmac_confused_token(public_key_pem: str) -> str:
@@ -48,9 +48,9 @@ def _make_hmac_confused_token(public_key_pem: str) -> str:
     key PEM as the shared secret - the classic RS256->HS512 algorithm
     confusion payload.
 
-    python-jose refuses to construct this itself (an asymmetric key cannot be
-    an HMAC secret), so the token is assembled by hand. verify_jwt() must
-    reject it on the algorithm whitelist before any signature work.
+    Assembled by hand (HMAC over raw segments) so the fixture never depends
+    on how a JWT library derives HMAC keys. verify_jwt() must reject it on
+    the algorithm whitelist before any signature work.
     """
     now = int(time.time())
     header = _b64url(json.dumps({"alg": "HS512", "typ": "JWT"}).encode())
@@ -106,7 +106,7 @@ class TestVerifyJwt:
 
     def test_wrong_audience_rejected(self, rsa_private_key: str) -> None:
         now = int(time.time())
-        token = jose_jwt.encode(
+        token = jwt.encode(
             {
                 "sub": "sub",
                 "tenant_id": "t",

@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-from jose import JWTError, jwt
+import jwt
 
 from {name}.core.config import settings
 from {name}.core.exceptions import TokenExpiredError, TokenInvalidError
@@ -145,7 +145,7 @@ def verify_jwt(token: str) -> dict[str, Any]:
         )
         return payload
 
-    except JWTError as exc:
+    except jwt.PyJWTError as exc:
         exc_str = str(exc).lower()
         if "exp" in exc_str or "expired" in exc_str:
             raise TokenExpiredError() from exc

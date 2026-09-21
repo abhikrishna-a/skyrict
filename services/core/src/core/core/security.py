@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, NotRequired, TypedDict, cast
 
-from jose import JWTError, jwt
+import jwt
 
 from core.core.config import settings
 from core.core.exceptions import StartupError, TokenExpiredError, TokenInvalidError
@@ -76,16 +76,16 @@ def verify_jwt(token: str) -> TokenClaims:
             issuer=settings.JWKS_ISSUER,
             audience=settings.JWKS_AUDIENCE,
             options={
-                "require_aud": True,
-                "require_iat": True,
-                "require_exp": True,
-                "require_iss": True,
-                "require_sub": True,
+                # PyJWT 2.13 validates required claims via a "require" list of
+                # claim names (the legacy per-claim require_* flags are gone).
+                # Require every claim our contract needs so tokens that omit
+                # exp/iat/sub/iss/aud are rejected, not silently accepted.
+                "require": ["aud", "iat", "exp", "iss", "sub"],
             },
         )
         return cast("TokenClaims", payload)
 
-    except JWTError as exc:
+    except jwt.PyJWTError as exc:
         exc_str = str(exc).lower()
         if "expired" in exc_str:
             raise TokenExpiredError() from exc
