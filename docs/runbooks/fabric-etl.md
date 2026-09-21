@@ -14,9 +14,10 @@ Bronze (raw ERP/CRM)  --silver transforms-->  Silver (cleaned, typed)  --gold bu
   one raw Bronze dict and returns a validated Pydantic `Silver*` model.
 - **Gold** (`skyrict_fabric/gold.py`): 7 builders. Each takes Silver models and
   returns Gold star-schema models.
-- **CLI** (`python -m skyrict_fabric`): `silver-clean`, `gold-build`,
-  `gold-reconcile`, `lineage-report`. File-path inputs only — credentials never
-  appear on the command line.
+- **CLI** (`python -m skyrict_fabric`): `silver-clean`, `silver-export`,
+  `gold-build`, `gold-load`, `gold-reconcile`, `lineage-report`. File-path
+  inputs only — credentials never appear on the command line (the Warehouse
+  connection string comes from the `SKYRICT_DB_URL` env var).
 
 ## Silver transforms (table by table)
 
@@ -139,3 +140,47 @@ Known skew in the canonical seed and how the transforms handle it:
 Drift guard: `tests/test_parity_queries.py` fails if `parity-queries.sql`
 references a table/column missing from the DDL, or if the expected totals in
 the SQL comments diverge from `seed.expected`.
+
+## Silver Parquet export
+
+Materialize Silver to Parquet (one file per table) with:
+
+```bash
+uv run python -m skyrict_fabric silver-export silver.json fabric/silver/
+```
+
+Writes `fabric/silver/<silver_table>.parquet` via pyarrow. This is the Silver
+materialization the ticket scopes; the Parquet files are the input to the
+Fabric Lakehouse.
+
+## Warehouse registration & Gold load
+
+`gold-load` upserts the Gold tables into a Warehouse with SCD-1 semantics:
+
+```bash
+SKYRICT_DB_URL=postgresql+asyncpg://user:pass@host:5432/warehouse \
+  uv run python -m skyrict_fabric gold-load gold.json
+```
+
+- Tables are created if missing (`CREATE TABLE IF NOT EXISTS` semantics via
+  `metadata.create_all`). In a Fabric Lakehouse, creating a table
+  auto-registers it in the metastore — that **is** the registration step.
+- Rows are inserted with `INSERT ... ON CONFLICT DO UPDATE` on the primary
+  key: re-running the load updates changed rows and never duplicates (SCD-1).
+- The loader (`skyrict_fabric/load.py`) derives DDL from the Pydantic models,
+  so the same code runs against SQLite (tests) and Postgres / Fabric
+  Warehouse (production). Money columns are `NUMERIC(18,4)`, UUIDs are native
+  `UUID` on Postgres.
+- The connection string comes only from `SKYRICT_DB_URL` — never from the
+  command line.
+
+## Parity queries (runnable)
+
+`fabric/samples/parity-queries.sql` is executed against a real database in
+`tests/test_parity_queries_runnable.py` (SQLite in-memory): the exact queries
+BI-PBI-001 compares its measures against, asserting the results equal
+`seed.expected`. This is the Gherkin "Gold reconciles" proven against actual
+SQL, not just Python aggregates.
+
+In production, run the same file against the Warehouse after `gold-load` —
+the expected totals are in the SQL comments.

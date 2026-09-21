@@ -64,6 +64,7 @@ def build_seed() -> SeedData:
             credit_limit=Decimal("50000"),
             currency_code="USD",
             is_active=True,
+            source_opportunity_id=OPP_1,
             created_at=NOW,
             updated_at=NOW,
         ),
@@ -75,6 +76,7 @@ def build_seed() -> SeedData:
             credit_limit=Decimal("100000"),
             currency_code="EUR",
             is_active=True,
+            source_opportunity_id=OPP_2,
             created_at=NOW,
             updated_at=NOW,
         ),
@@ -241,6 +243,7 @@ def build_gold_from_seed(seed: SeedData) -> dict[str, Any]:
     """Run the Gold builders over the seed and return the assembled outputs."""
     from skyrict_fabric.gold import (
         build_dim_customer,
+        build_dim_date,
         build_dim_product,
         build_dim_rep,
         build_fact_deals,
@@ -254,9 +257,18 @@ def build_gold_from_seed(seed: SeedData) -> dict[str, Any]:
     fact_deals = build_fact_deals(seed.opportunities, dim_customer)
     fact_revenue = build_fact_revenue(seed.invoices, seed.payments, dim_customer)
     fact_pipeline = build_fact_pipeline(seed.opportunities)
+    dates: list[date] = []
+    for inv in seed.invoices:
+        if inv.invoice_date is not None:
+            dates.append(inv.invoice_date)
+        if inv.due_date is not None:
+            dates.append(inv.due_date)
+    dates += [o.created_at.date() for o in seed.opportunities]
+    dim_date = build_dim_date(min(dates), max(dates))
     return {
         "dim_customer": dim_customer,
         "dim_product": dim_product,
+        "dim_date": dim_date,
         "dim_rep": dim_rep,
         "fact_deals": fact_deals,
         "fact_revenue": fact_revenue,
