@@ -92,7 +92,7 @@ class TestVerifyJwt:
             "exp": now + 300,
             "type": "access",
         }
-        token = jwt.encode(payload, "compromised-shared-secret", algorithm="HS256")
+        token = jwt.encode(payload, "compromised-shared-secret-0123456789", algorithm="HS256")
         with pytest.raises(TokenInvalidError):
             verify_jwt(token)
 
