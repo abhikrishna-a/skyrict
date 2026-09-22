@@ -1,12 +1,12 @@
 "use client";
 
-import { Spinner } from "@/components/ui/spinner";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { CheckCircle2, Mail } from "lucide-react";
+import { Mail } from "lucide-react";
 
 import { env } from "@/config/env";
 import { RiskChallenge } from "@/components/onboarding/risk-challenge";
@@ -30,49 +30,15 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [captchaError, setCaptchaError] = useState(false);
   const [submitError, setSubmitError] = useState<string>();
-  const [availability, setAvailability] = useState<
-    "idle" | "checking" | "available" | "taken"
-  >("idle");
   const {
     register,
     handleSubmit,
-    watch,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<AccountValues>({
     resolver: zodResolver(accountSchema),
     defaultValues: { email: "" },
   });
-
-  const email = watch("email");
-
-  useEffect(() => {
-    let cancelled = false;
-    const parsed = emailSchema.safeParse(email);
-    if (!parsed.success) {
-      setAvailability("idle");
-      return;
-    }
-    setAvailability("checking");
-    const timer = setTimeout(async () => {
-      try {
-        const result = await checkEmailAvailability({ email: parsed.data });
-        if (!cancelled) {
-          setAvailability(result.available ? "available" : "taken");
-        }
-      } catch {
-        // Backend unreachable / transient failure - never crash the wizard.
-        // Fall back to a neutral state so the user can still continue.
-        if (!cancelled) {
-          setAvailability("idle");
-        }
-      }
-    }, 500);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [email]);
 
   async function onSubmit(values: AccountValues) {
     const honeypot = new FormData(formRef.current ?? undefined).get("website");
@@ -131,34 +97,13 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
     >
       <AuthInput
         label="Work email"
+        hideLabel
         id="email"
         type="email"
         autoComplete="email"
-        placeholder="you@company.com"
+        placeholder="name@company.com"
         icon={Mail}
-        hint={
-          availability === "checking"
-            ? "Checking availability\n"
-            : availability === "available"
-              ? "This email is available."
-              : undefined
-        }
-        error={
-          errors.email?.message ??
-          (availability === "taken"
-            ? "This email is unavailable."
-            : undefined)
-        }
-        trailing={
-          availability === "checking" ? (
-            <Spinner
-              aria-hidden="true"
-              className="mr-1 size-4 text-muted-foreground"
-            />
-          ) : availability === "available" ? (
-            <CheckCircle2 aria-hidden="true" className="mr-1 size-4 text-primary" />
-          ) : null
-        }
+        error={errors.email?.message}
         {...register("email")}
       />
 
@@ -187,6 +132,24 @@ function AccountStep({ demoCaptcha = false }: { demoCaptcha?: boolean }) {
           </p>
         ) : null}
       </div>
+
+      <p className="pt-1 text-center text-[11px] leading-relaxed text-muted-foreground">
+        By signing up, I agree to the Skyrict{" "}
+        <Link
+          href="/terms"
+          className="underline underline-offset-4 hover:text-foreground"
+        >
+          Terms of Service
+        </Link>{" "}
+        and{" "}
+        <Link
+          href="/privacy"
+          className="underline underline-offset-4 hover:text-foreground"
+        >
+          Privacy Policy
+        </Link>
+        .
+      </p>
 
       <AuthButton
         type="submit"

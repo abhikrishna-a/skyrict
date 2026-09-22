@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 import { AccountStep } from "@/features/onboarding/account-step";
 
 export const metadata: Metadata = {
-    title: "Create your workspace",
-    description: "Step 1 of 7 - enter your work email to start.",
+    title: "Try Skyrict for free",
+    description: "Enter your work email to start.",
 };
 
 export default async function RegisterPage({
@@ -15,20 +15,15 @@ export default async function RegisterPage({
     const params = await searchParams;
 
     return (
-        <div className="space-y-6">
-            <div className="space-y-2">
-                <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
-                    Step 1 of 7 · Account
-                </p>
-                <h1 className="font-display text-2xl font-semibold text-foreground">
-                    Let&apos;s get you set up
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                    Create your Skyrict account in about two minutes. We&apos;ll
-                    confirm your email, secure your password, help you pick a
-                    plan, and wire up your organization.
-                </p>
-            </div>
+        <div className="space-y-6 text-center">
+            <h1 className="font-display text-2xl font-semibold text-foreground">
+                Try Skyrict for free
+            </h1>
+
+            <p className="mx-auto max-w-xs text-sm leading-relaxed text-muted-foreground">
+                Please use your work email address so we can connect you with
+                your team in Skyrict.
+            </p>
 
             <AccountStep demoCaptcha={params.demoCaptcha === "1"} />
         </div>

@@ -86,11 +86,11 @@ export async function registerTenant(
 
     await page.goto(`${signupUrl()}/register`);
     await page.getByLabel("Work email").fill(input.email);
-    await page
-        .getByText("This email is available.")
-        .waitFor({ timeout: 15_000 });
     // Without a Turnstile site key (ENVIRONMENT=test) the risk challenge is a
     // plain checkbox that runs the normal solve-captcha affordance on check.
+    await page
+        .getByRole("checkbox", { name: "I'm not a robot" })
+        .waitFor({ timeout: 15_000 });
     await page.getByRole("checkbox", { name: "I'm not a robot" }).check();
     await page.getByRole("button", { name: "Continue with email" }).click();
     await page.waitForURL("**/register/verify**");

@@ -1,5 +1,5 @@
 "use client";
-import { AiGlyph } from "@/components/brand/logo";
+import { AiGlyph, Logo } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useState } from "react";
@@ -27,6 +27,7 @@ function RiskChallenge({
         "idle",
     );
     const [checked, setChecked] = useState(false);
+    const [done, setDone] = useState(false);
 
     const useTurnstile = Boolean(env.turnstileSiteKey);
 
@@ -57,14 +58,42 @@ function RiskChallenge({
                 </div>
             );
         }
+
+        function handleToken(token: string | null) {
+            onTokenChange?.(token);
+            onValidChange?.(Boolean(token));
+            setDone(Boolean(token));
+        }
+
+        // Full-page verification in the style of Cloudflare's challenge pages:
+        // a full-viewport screen with the brand and the Turnstile widget cross-
+        // fades away as soon as a token is issued, revealing the form beneath.
+        // The widget stays mounted (invisible) so expired tokens re-open it.
         return (
-            <TurnstileWidget
-                siteKey={env.turnstileSiteKey}
-                onTokenChange={(token) => {
-                    onTokenChange?.(token);
-                    onValidChange?.(Boolean(token));
-                }}
-            />
+            <div
+                aria-hidden={done}
+                inert={done}
+                className={cn(
+                    "fixed inset-0 z-50 flex items-center justify-center bg-card transition-opacity duration-300",
+                    done ? "pointer-events-none opacity-0" : "opacity-100",
+                )}
+            >
+                <div className="mx-auto flex w-full max-w-sm flex-col items-center gap-6 px-6 py-10 text-center">
+                    <div className="flex flex-col items-center gap-2">
+                        <Logo className="text-foreground" />
+                        <h2 className="font-display text-xl font-semibold text-foreground">
+                            Verifying you are human
+                        </h2>
+                        <p className="text-sm text-muted-foreground">
+                            This protects Skyrict from automated abuse.
+                        </p>
+                    </div>
+                    <TurnstileWidget
+                        siteKey={env.turnstileSiteKey}
+                        onTokenChange={handleToken}
+                    />
+                </div>
+            </div>
         );
     }
 
