@@ -5,7 +5,8 @@
    "metadata": {},
    "source": [
     "# Silver: CRM / Sales (SKY-118)\n",
-    "Runs the Silver transforms for the CRM + sales module group.\n",
+    "Runs the Silver transforms for the CRM + sales module group and\n",
+    "exports the cleaned tables to Parquet.\n",
     "Input: Bronze JSON keyed by `erp_crm_leads`, `erp_crm_opportunities`,\n",
     "`erp_crm_customers`, `erp_sales_orders`, `erp_sales_order_lines`.\n",
     "See `fabric/pipelines/silver_crm_sales.pipeline.json`."
@@ -16,17 +17,22 @@
    "execution_count": null,
    "metadata": {},
    "outputs": [],
-   "source": [
-    "import subprocess, sys\n",
-    "\n",
-    "BRONZE = \"/lakehouse/default/Files/bronze/crm_sales.json\"\n",
-    "SILVER = \"/lakehouse/default/Files/silver/crm_sales.json\"\n",
-    "\n",
-    "subprocess.run(\n",
-    "    [sys.executable, \"-m\", \"skyrict_fabric\", \"silver-clean\", BRONZE, SILVER],\n",
-    "    check=True,\n",
-    ")"
-   ]
+"source": [
+     "import subprocess, sys\n",
+     "\n",
+     "BRONZE = \"/lakehouse/default/Files/bronze/crm_sales.json\"\n",
+     "SILVER = \"/lakehouse/default/Files/silver/crm_sales.json\"\n",
+     "PARQUET = \"/lakehouse/default/Files/silver/parquet\"\n",
+     "\n",
+     "subprocess.run(\n",
+     "    [sys.executable, \"-m\", \"skyrict_fabric\", \"silver-clean\", BRONZE, SILVER],\n",
+     "    check=True,\n",
+     ")\n",
+     "subprocess.run(\n",
+     "    [sys.executable, \"-m\", \"skyrict_fabric\", \"silver-export\", SILVER, PARQUET],\n",
+     "    check=True,\n",
+     ")"
+    ]
   }
  ],
  "metadata": {

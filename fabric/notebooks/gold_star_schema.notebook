@@ -5,8 +5,9 @@
    "metadata": {},
    "source": [
     "# Gold: Star Schema (SKY-118)\n",
-    "Builds the Gold star schema from Silver JSON, then reconciles the\n",
-    "aggregates against the canonical seeded totals.\n",
+    "Builds the Gold star schema from Silver JSON, reconciles the\n",
+    "aggregates against the canonical seeded totals, then loads the tables\n",
+    "into the Warehouse (metastore registration + SCD-1 upsert).\n",
     "See `fabric/pipelines/gold_star_schema.pipeline.json` and\n",
     "`fabric/samples/parity-queries.sql`."
    ]
@@ -16,22 +17,29 @@
    "execution_count": null,
    "metadata": {},
    "outputs": [],
-   "source": [
-    "import subprocess, sys\n",
-    "\n",
-    "SILVER = \"/lakehouse/default/Files/silver/crm_sales.json\"\n",
-    "GOLD = \"/lakehouse/default/Files/gold/star_schema.json\"\n",
-    "EXPECTED = \"/lakehouse/default/Files/gold/expected.json\"\n",
-    "\n",
-    "subprocess.run(\n",
-    "    [sys.executable, \"-m\", \"skyrict_fabric\", \"gold-build\", SILVER, GOLD],\n",
-    "    check=True,\n",
-    ")\n",
-    "subprocess.run(\n",
-    "    [sys.executable, \"-m\", \"skyrict_fabric\", \"gold-reconcile\", GOLD, EXPECTED],\n",
-    "    check=True,\n",
-    ")"
-   ]
+"source": [
+     "import subprocess, sys\n",
+     "\n",
+     "SILVER = \"/lakehouse/default/Files/silver/crm_sales.json\"\n",
+     "GOLD = \"/lakehouse/default/Files/gold/star_schema.json\"\n",
+     "EXPECTED = \"/lakehouse/default/Files/gold/expected.json\"\n",
+     "\n",
+     "subprocess.run(\n",
+     "    [sys.executable, \"-m\", \"skyrict_fabric\", \"gold-build\", SILVER, GOLD],\n",
+     "    check=True,\n",
+     ")\n",
+     "subprocess.run(\n",
+     "    [sys.executable, \"-m\", \"skyrict_fabric\", \"gold-reconcile\", GOLD, EXPECTED],\n",
+     "    check=True,\n",
+     ")\n",
+     "# Load into the Warehouse: create_all registers the tables in the metastore,\n",
+     "# then SCD-1 upserts. SKYRICT_DB_URL must be set in the Fabric environment\n",
+     "# (Key Vault / env) -- never hardcode credentials in the notebook.\n",
+     "subprocess.run(\n",
+     "    [sys.executable, \"-m\", \"skyrict_fabric\", \"gold-load\", GOLD],\n",
+     "    check=True,\n",
+     ")"
+    ]
   }
  ],
  "metadata": {

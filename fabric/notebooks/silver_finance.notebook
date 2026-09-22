@@ -5,7 +5,8 @@
    "metadata": {},
    "source": [
     "# Silver: Finance (SKY-118)\n",
-    "Runs the Silver transforms for the finance module group.\n",
+    "Runs the Silver transforms for the finance module group and\n",
+    "exports the cleaned tables to Parquet.\n",
     "Input: Bronze JSON keyed by `erp_invoices`, `erp_payments`,\n",
     "`erp_journal_lines`, `erp_products`, `erp_currencies`.\n",
     "See `fabric/pipelines/silver_finance.pipeline.json`."
@@ -16,17 +17,22 @@
    "execution_count": null,
    "metadata": {},
    "outputs": [],
-   "source": [
-    "import subprocess, sys\n",
-    "\n",
-    "BRONZE = \"/lakehouse/default/Files/bronze/finance.json\"\n",
-    "SILVER = \"/lakehouse/default/Files/silver/finance.json\"\n",
-    "\n",
-    "subprocess.run(\n",
-    "    [sys.executable, \"-m\", \"skyrict_fabric\", \"silver-clean\", BRONZE, SILVER],\n",
-    "    check=True,\n",
-    ")"
-   ]
+"source": [
+     "import subprocess, sys\n",
+     "\n",
+     "BRONZE = \"/lakehouse/default/Files/bronze/finance.json\"\n",
+     "SILVER = \"/lakehouse/default/Files/silver/finance.json\"\n",
+     "PARQUET = \"/lakehouse/default/Files/silver/parquet\"\n",
+     "\n",
+     "subprocess.run(\n",
+     "    [sys.executable, \"-m\", \"skyrict_fabric\", \"silver-clean\", BRONZE, SILVER],\n",
+     "    check=True,\n",
+     ")\n",
+     "subprocess.run(\n",
+     "    [sys.executable, \"-m\", \"skyrict_fabric\", \"silver-export\", SILVER, PARQUET],\n",
+     "    check=True,\n",
+     ")"
+    ]
   }
  ],
  "metadata": {
