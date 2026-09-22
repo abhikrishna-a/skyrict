@@ -513,6 +513,7 @@ export const erpNavGroups: NavGroup[] = [
                 href: "/erp/reports",
                 label: "Reports",
                 icon: BarChart3,
+                permission: "erp.reports.read",
             },
         ],
     },

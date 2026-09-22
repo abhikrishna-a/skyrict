@@ -6,6 +6,7 @@ import {
     workspaceAccountItems,
     workspaceNavGroups,
 } from "@/components/dashboard/workspace/sidebar-config";
+import { resolveRoutePermission } from "@/lib/access/route-permissions";
 
 /* ---------- isSidebarItemActive ---------- */
 
@@ -236,4 +237,31 @@ describe("nav destinations are real pages, never redirect aliases", () => {
         );
     });
 });
+});
+
+/* ---------- Route permission consistency (hidden surfaces) ---------- */
+
+describe("ERP nav permissions resolve through route-permissions", () => {
+    function allErpNavItems(): Array<{ href: string; permission?: string }> {
+        return erpNavGroups.flatMap((group) => group.items).flatMap((item) => [
+            item,
+            ...(item.children ?? []),
+        ]);
+    }
+
+    it("gates the Reports row on erp.reports.read", () => {
+        const reports = allErpNavItems().find(
+            (item) => item.href === "/erp/reports",
+        );
+        expect(reports?.permission).toBe("erp.reports.read");
+    });
+
+    it("resolves every permission-gated nav href through the route map", () => {
+        for (const item of allErpNavItems()) {
+            if (!item.permission) continue;
+            expect(resolveRoutePermission(item.href), item.href).toBe(
+                item.permission,
+            );
+        }
+    });
 });
