@@ -5,7 +5,63 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.1.0-beta.1] - 2026-09-22
+
+First public beta of the Skyrict multi-tenant business suite. Released through
+REL-GATE-001: all E2E/perf/security suites green on the `beta` branch, a
+Postgres PITR restore drill passing exact-hash parity, 24–48 h Azure soak with
+clean logs, and a rehearsed rollback. See
+[docs/runbooks/azure-release.md](docs/runbooks/azure-release.md) and
+[docs/releases/2026-09-beta-1-gate.md](docs/releases/2026-09-beta-1-gate.md).
+
+### Added
+
+- **Identity service** (0.1.0): JWT access/refresh auth, registration,
+  login/logout, MFA (TOTP setup/verify), session management and revocation,
+  multi-tenant RBAC with row-level security, audit logging, RFC 7807 error
+  responses, strict tenant-resolution middleware, Alembic-managed schema
+  (head `0032`).
+- **Core service** (0.1.0): ERP modules — CRM (leads, opportunities,
+  customers, activities), payroll, inventory, orders, finance (accounts,
+  journal entries, invoices, budgets, expenses, statements), HR (employees,
+  leave, attendance, attrition, planning), reports (cached aggregates) and
+  documents — with workflows/approvals and a reporting engine. Alembic head
+  `0063`.
+- **AI agent service** (0.1.0): agents for chat, natural-language inventory
+  lookups, a report builder, a finance advisor, and document AI; Coaching and
+  Guardian agent experiences; Ollama-backed local inference. Alembic head
+  `0028`.
+- **Web app**: Next.js 15 workspace with four tenant-routed subdomains
+  (marketing, signup, signin, workspace), ERP/AI/analytics dashboards, and
+  RBAC-driven UI.
+- **Azure beta environment**: Container Apps (identity, core, ai-agent) with
+  scale-to-zero, Flexible Postgres 16 with `vector` + `pg_trgm` (7-day
+  backup retention, PITR), Azure Cache for Redis, ACR, Key Vault, Log
+  Analytics, and subscription budgets — deployed by an OIDC CD workflow with
+  an idempotency gate (`docs/runbooks/azure-iac.md`).
+- **QA infrastructure**: Playwright E2E suite (reports-smoke, CRM/finance,
+  AI, perf, security projects), Lighthouse performance budgets, backend
+  performance gates (`bench-core`), CodeQL and gitleaks scans, and a
+  Postgres restore-drill parity toolchain (`scripts/azure/pg-parity.sql`).
+
+### Changed
+
+- Root README: CI status badge and "Roadmap & Scope" section kept accurate;
+  stage badge moved to Beta with the release.
+- Local dev infrastructure: Kafka deferred until 3+ services need decoupled
+  async events; local stack runs pgvector/Postgres 18, Redis 7, mailpit and
+  nginx tenant routing.
+
+### Fixed
+
+- Identity service: registration/login commits on success (writes were rolled
+  back at session close), cross-module ORM relationships registered through
+  `identity/db/models.py`, and the `RoleModel.tenant_id` foreign key.
+- Core service: database upgrades run through Alembic jobs in dependency
+  order (previously a stale upgrade head could leave tables missing).
+
+[Unreleased]: https://github.com/nkswalih/skyrict/compare/v0.1.0-beta.1...HEAD
+[0.1.0-beta.1]: https://github.com/nkswalih/skyrict/releases/tag/v0.1.0-beta.1
 
 ### Added
 

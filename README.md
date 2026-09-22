@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Stage-Alpha-red?style=flat-square" alt="Alpha"/>
+  <img src="https://img.shields.io/badge/Stage-Beta-yellow?style=flat-square" alt="Beta"/>
   <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License"/>
   <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
   <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen?style=flat-square" alt="PRs Welcome"/>
