@@ -158,9 +158,14 @@ Fabric Lakehouse.
 `gold-load` upserts the Gold tables into a Warehouse with SCD-1 semantics:
 
 ```bash
-SKYRICT_DB_URL=postgresql+asyncpg://user:pass@host:5432/warehouse \
+SKYRICT_DB_URL=postgresql+psycopg2://user:pass@host:5432/warehouse \
   uv run python -m skyrict_fabric gold-load gold.json
 ```
+
+- The loader uses a **sync** SQLAlchemy engine, so the URL must use a sync
+  driver (`postgresql+psycopg2://`; `psycopg2-binary` is a dependency).
+  `postgresql+asyncpg://` is **not** valid here — asyncpg is an async driver
+  and `create_engine` rejects it.
 
 - Tables are created if missing (`CREATE TABLE IF NOT EXISTS` semantics via
   `metadata.create_all`). In a Fabric Lakehouse, creating a table
