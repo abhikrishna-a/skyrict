@@ -7,12 +7,16 @@ domain entities (``identity.domain.entities.Role``).
 from __future__ import annotations
 
 import uuid
+from collections.abc import Sequence
 from typing import Any
 
 from sqlalchemy import delete, func, select
 
+from identity.core.constants import SYSTEM_ROLE_DEFINITIONS, TENANT_OWNER_ROLE
+from identity.core.permissions import WILDCARD
 from identity.db.repository import SqlRepository
 from identity.domain.entities import Role, ScopeType
+from identity.features.roles.reconcile import plan_system_role_changes
 from identity.models.role import RoleModel
 from identity.models.user_role import UserRoleModel
 from skyrict_common.exceptions import NotFoundError
@@ -41,6 +45,27 @@ def _from_orm(model: RoleModel) -> Role:
         is_system_role=model.is_system_role,
         created_at=model.created_at,
     )
+
+
+def _effective_permissions(
+    rows: Sequence[tuple[str, Sequence[str]]],
+) -> set[str]:
+    """Resolve granted role rows to an effective permission set.
+
+    ``tenant_owner`` holders resolve to full access regardless of the stored
+    array. The owner role is provisioned with the ``*`` wildcard and must never
+    be narrowed; taking precedence at resolution time makes "owner lost
+    permissions" structurally impossible even if a stored array drifted.
+
+    Rows are ``(role_name, permissions_array)`` pairs. Pure and database-free
+    so the invariant is unit-testable without a database.
+    """
+    permissions: set[str] = set()
+    for role_name, role_permissions in rows:
+        if role_name == TENANT_OWNER_ROLE:
+            return {WILDCARD}
+        permissions.update(role_permissions)
+    return permissions
 
 
 class RoleRepository(SqlRepository):
@@ -169,9 +194,14 @@ class RoleRepository(SqlRepository):
     async def get_permissions_for_user(
         self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID
     ) -> set[str]:
-        """Return the union of permission keys granted to a user in a tenant."""
+        """Return the union of permission keys granted to a user in a tenant.
+
+        The owner is invariant: anyone holding the ``tenant_owner`` role
+        resolves to full access (``*``) even if the stored role array was ever
+        drifted or trimmed, so an owner can never silently lose permissions.
+        """
         stmt = (
-            select(RoleModel.permissions)
+            select(RoleModel.name, RoleModel.permissions)
             .join(UserRoleModel, UserRoleModel.role_id == RoleModel.id)
             .where(
                 UserRoleModel.user_id == user_id,
@@ -179,10 +209,61 @@ class RoleRepository(SqlRepository):
             )
         )
         result = await self.session.execute(stmt)
-        permissions: set[str] = set()
-        for role_permissions in result.scalars().all():
-            permissions.update(role_permissions)
-        return permissions
+        rows = [(row[0], row[1]) for row in result.all()]
+        return _effective_permissions(rows)
+
+    async def reconcile_system_roles(self) -> dict[str, int]:
+        """Align every tenant's system roles with the platform definitions.
+
+        Only ``is_system_role = TRUE`` rows are considered, so tenant-created
+        custom roles are never modified. Tenants are discovered from existing
+        system-role rows; a tenant with none is skipped. Safe to run on every
+        boot - a healthy database is a read-only no-op.
+
+        Returns ``{"tenants": ..., "created": ..., "repaired": ...}`` so the
+        caller can log (or alarm on) what changed.
+        """
+        definitions = dict(SYSTEM_ROLE_DEFINITIONS)
+
+        tenant_result = await self.session.execute(
+            select(RoleModel.tenant_id).where(RoleModel.is_system_role.is_(True)).distinct()
+        )
+        tenant_ids = [row[0] for row in tenant_result.all()]
+
+        created = 0
+        repaired = 0
+
+        for tenant_id in tenant_ids:
+            roles_result = await self.session.execute(
+                select(RoleModel).where(
+                    RoleModel.tenant_id == tenant_id,
+                    RoleModel.is_system_role.is_(True),
+                )
+            )
+            existing = {role.name: role for role in roles_result.scalars().all()}
+
+            to_create, to_repair = plan_system_role_changes(
+                {name: role.permissions for name, role in existing.items()},
+                definitions=definitions,
+            )
+
+            for name in to_create:
+                self.session.add(
+                    RoleModel(
+                        tenant_id=tenant_id,
+                        name=name,
+                        permissions=list(definitions[name]),
+                        is_system_role=True,
+                    )
+                )
+                created += 1
+
+            for name in to_repair:
+                existing[name].permissions = list(definitions[name])
+                repaired += 1
+
+        await self.session.commit()
+        return {"tenants": len(tenant_ids), "created": created, "repaired": repaired}
 
     async def revoke_all_for_user(
         self, user_id: str | uuid.UUID, tenant_id: str | uuid.UUID

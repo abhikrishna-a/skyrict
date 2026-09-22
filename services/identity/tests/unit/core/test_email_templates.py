@@ -150,9 +150,7 @@ def test_invitation_html_link_branch() -> None:
     assert "Acme Corp" in html
     assert "Aisha" in html
     assert "Accept invitation" in html
-    assert (
-        'href="https://acme.signin.skyrict.com/invite?token=tok_abc123"' in html
-    )
+    assert 'href="https://acme.signin.skyrict.com/invite?token=tok_abc123"' in html
 
 
 def test_invitation_html_token_branch() -> None:
@@ -173,7 +171,7 @@ def test_invitation_html_escapes_xss() -> None:
         token="safe_token",
     )
     assert "<script>" not in html
-    assert '&lt;script&gt;' in html
+    assert "&lt;script&gt;" in html
     assert "<img" not in html  # escaped, no bare tag
     assert "&lt;img src=x&gt;" in html
 

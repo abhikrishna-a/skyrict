@@ -22,6 +22,8 @@ from fastapi import FastAPI
 from identity.api import readiness
 from identity.core.config import settings
 from identity.core.logging import configure_identity_logging, get_logger
+from identity.db.session import async_session_factory
+from identity.features.roles.repository import RoleRepository
 
 
 @asynccontextmanager
@@ -40,6 +42,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup verification - fail-fast: any failure raises StartupError and
     # the process exits immediately (orchestrator restarts the pod).
     await readiness.verify_startup_dependencies()
+
+    # System-role reconciliation - align stored system roles with the platform
+    # definitions (owner wildcard repair, new-key propagation). Non-fatal: a
+    # failure is logged and startup proceeds, because permission resolution
+    # treats any tenant_owner holder as full access regardless of stored data.
+    try:
+        async with async_session_factory() as session:
+            summary = await RoleRepository(session).reconcile_system_roles()
+        logger.info("roles.reconciled", **summary)
+    except Exception:
+        logger.exception("roles.reconcile.failed")
+
     readiness.mark_ready()
     logger.info("service.started", environment=settings.ENVIRONMENT.value)
 

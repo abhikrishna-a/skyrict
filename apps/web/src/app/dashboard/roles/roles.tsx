@@ -117,6 +117,13 @@ export default function RolesClient() {
             ? (status.roles.find((role) => role.id === editingId) ?? null)
             : null;
 
+    // The owner role carries the "*" wildcard, which has no catalog checkbox.
+    // When it is present the role has full access, so the editor must say so
+    // instead of showing a misleading "N of M permissions selected" grid.
+    const hasFullAccess = editingRole
+        ? editingRole.permissions.includes("*")
+        : selected.has("*");
+
     const readOnly =
         status.state !== "ready" ||
         !status.canManage ||
@@ -506,7 +513,28 @@ export default function RolesClient() {
                                 <ListSkeleton rows={3} />
                             ) : null}
 
+                            {status.state === "ready" && hasFullAccess ? (
+                                <div className="flex h-full flex-col items-center justify-center gap-3 px-6 py-12 text-center">
+                                    <div className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                                        <ShieldCheck
+                                            aria-hidden="true"
+                                            className="size-5"
+                                        />
+                                    </div>
+                                    <p className="font-display text-sm font-semibold text-foreground">
+                                        Full access
+                                    </p>
+                                    <p className="max-w-sm text-sm text-muted-foreground">
+                                        This role can do everything in the
+                                        workspace, including every current and
+                                        future permission. System roles cannot
+                                        be changed.
+                                    </p>
+                                </div>
+                            ) : null}
+
                             {status.state === "ready" &&
+                            !hasFullAccess &&
                             filteredModules.length === 0 ? (
                                 <div className="px-4 py-10 text-center text-sm text-muted-foreground">
                                     {query.trim()
@@ -516,6 +544,7 @@ export default function RolesClient() {
                             ) : null}
 
                             {status.state === "ready" &&
+                            !hasFullAccess &&
                             filteredModules.length > 0 ? (
                                 <div className="space-y-3">
                                     {filteredModules.map((module) => {
@@ -617,14 +646,25 @@ export default function RolesClient() {
 
                     <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-muted/30 px-4 py-3">
                         <p className="text-xs text-muted-foreground">
-                            <span className="font-medium text-foreground tabular-nums">
-                                {selected.size}
-                            </span>{" "}
-                            of{" "}
-                            <span className="tabular-nums">
-                                {totalPermissions}
-                            </span>{" "}
-                            permissions selected
+                            {selected.has("*") ? (
+                                <>
+                                    <span className="font-medium text-foreground">
+                                        Full access
+                                    </span>{" "}
+                                    to all permissions
+                                </>
+                            ) : (
+                                <>
+                                    <span className="font-medium text-foreground tabular-nums">
+                                        {selected.size}
+                                    </span>{" "}
+                                    of{" "}
+                                    <span className="tabular-nums">
+                                        {totalPermissions}
+                                    </span>{" "}
+                                    permissions selected
+                                </>
+                            )}
                         </p>
                         <div className="flex items-center gap-2">
                             {editingRole && !readOnly ? (

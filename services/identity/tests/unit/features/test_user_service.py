@@ -493,6 +493,24 @@ class TestUpdateRole:
         with pytest.raises(ValidationError, match="Nothing to update"):
             await service.update_role(tenant_id, role.id)
 
+    async def test_rejects_editing_a_system_role(self) -> None:
+        tenant_id = uuid.uuid4()
+        role = _make_role(
+            name="tenant_owner",
+            tenant_id=tenant_id,
+            is_system_role=True,
+            permissions=["*", "invitations:send"],
+        )
+        repo = FakeRoleRepo([role])
+        service = RoleManagementService(repo)
+
+        with pytest.raises(ValidationError, match="built in and cannot be changed"):
+            await service.update_role(
+                tenant_id,
+                role.id,
+                permissions=["invitations:send"],
+            )
+
 
 class TestDeleteRole:
     async def test_deletes_custom_role(self) -> None:

@@ -120,11 +120,19 @@ class RoleManagementService:
         name: str | None = None,
         permissions: list[str] | None = None,
     ) -> Role:
-        """Update a custom role's name and/or permissions (tenant-owned only)."""
+        """Update a custom role's name and/or permissions (tenant-owned only).
+
+        System roles are immutable: their definitions are platform-owned and
+        kept aligned by reconciliation, not by tenant edits. Guarding here
+        closes the drift entry-point in the API (the UI already locks them).
+        """
         if name is None and permissions is None:
             raise ValidationError("Nothing to update")
 
         role = await self._require_owned_role(tenant_id, role_id)
+
+        if role.is_system_role:
+            raise ValidationError("System roles are built in and cannot be changed")
 
         if name is not None:
             if name in SYSTEM_ROLE_NAMES:
