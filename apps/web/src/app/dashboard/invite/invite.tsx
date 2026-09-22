@@ -388,12 +388,6 @@ export default function InviteClient() {
                                     )}
                                 </Button>
                             </div>
-                            <p className="text-[11px] text-muted-foreground">
-                                Token (shown once):{" "}
-                                <code className="break-all font-mono text-foreground">
-                                    {created.token}
-                                </code>
-                            </p>
                         </div>
                     ) : null}
                 </section>
