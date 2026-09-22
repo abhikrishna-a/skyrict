@@ -187,7 +187,7 @@ function DocsShell({ children }: { children: React.ReactNode }) {
                         </Button>
 
                         <Button size="sm" asChild>
-                            <Link href="/register">Create account</Link>
+                            <Link href="/signup">Create account</Link>
                         </Button>
                     </div>
                 </div>

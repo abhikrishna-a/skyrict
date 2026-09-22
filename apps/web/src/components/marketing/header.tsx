@@ -67,7 +67,7 @@ function Header() {
                 </nav>
                 <div className="hidden items-center gap-2 md:flex">
                     <Button asChild>
-                        <Link href="/register">Sign Up</Link>
+                        <Link href="/signup">Sign Up</Link>
                     </Button>
                 </div>
                 <button
@@ -112,7 +112,7 @@ function Header() {
                     <div className="mt-3 flex flex-col gap-2 border-t border-border/70 pt-3">
                         <Button asChild>
                             <Link
-                                href="/register"
+                                href="/signup"
                                 onClick={() => setOpen(false)}
                             >
                                 Sign Up

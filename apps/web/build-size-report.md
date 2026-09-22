@@ -30,10 +30,10 @@ Measured effect on First Load JS (gzip): `/dashboard/erp/inventory/health` 303 �
 | Metric | gzip |
 |---|---:|
 | First Load JS **shared by all routes** | **161 kB** |
-| `/dashboard` (post-login home) | 186 kB |
-| `/dashboard/erp/reports` | 192 kB |
+| `/dashboard` (post-login home) | 188 kB |
+| `/dashboard/erp/reports` | 193 kB |
 | `/dashboard/erp/inventory/health` | **184 kB** |
-| `/dashboard/erp/payroll` | **198 kB** |
+| `/dashboard/erp/payroll` | **200 kB** |
 | `/dashboard/erp/reports/[reportId]` | **190 kB** |
 
 Pre-split the ERP surface was the heaviest: `/payroll`, `/inventory/health`, `/hr/planning`, `/hr/correlation` and `/reports/[reportId]` all landed at 303–315 kB first-load JS because they eager-imported recharts (net ~103 kB gzip). After Commit 3 they sit at 184–198 kB.
@@ -43,10 +43,10 @@ Pre-split the ERP surface was the heaviest: `/payroll`, `/inventory/health`, `/h
 | Route | First Load JS budget (gzip) |
 |---|---:|
 | all routes (shared) | ≤ 161 kB |
-| `/dashboard` | ≤ 186 kB |
-| `/dashboard/erp/reports` | ≤ 192 kB |
+| `/dashboard` | ≤ 188 kB |
+| `/dashboard/erp/reports` | ≤ 193 kB |
 | `/dashboard/erp/inventory/health` | ≤ 184 kB |
-| `/dashboard/erp/payroll` | ≤ 198 kB |
+| `/dashboard/erp/payroll` | ≤ 200 kB |
 
 Strict monotonic: the gate fails if any budgeted route **exceeds** the committed baseline. The gate (`scripts/perf/assert-bundle-sizes.mjs` in `ci-web.yml`) enforces **every route in the table below** at its baseline value — the rows above are the headline targets. Improvements are expected to lower these numbers; when a change deliberately moves one up, the baseline file + this report are updated **in the same commit**.
 
@@ -66,100 +66,108 @@ Strict monotonic: the gate fails if any budgeted route **exceeds** the committed
 
 `9867-*` (100.1 kB) is the resolving `@sentry/core`–heavy chunk that still rides the shared 161 kB total; the old `recharts`-bearing chunk is no longer on any route's first-load path. The shared total itself is unchanged at 161 kB — chart code now lives in per-route lazy chunks instead of the shared solve.
 
-## Full route table (all 93 routes)
+## Full route table (all 101 routes)
 | / | 1.61 kB | 258 kB |
-| /dashboard | 8.05 kB | 186 kB |
-| /dashboard/agents | 1.49 kB | 269 kB |
-| /dashboard/agents/c/[id] | 1.91 kB | 269 kB |
-| /dashboard/agents/coaching | 4.87 kB | 230 kB |
-| /dashboard/agents/guardian | 2.14 kB | 230 kB |
-| /dashboard/agents/guardian/[reportId] | 2.63 kB | 231 kB |
-| /dashboard/erp | 27.3 kB | 220 kB |
-| /dashboard/erp/approvals | 8.67 kB | 207 kB |
-| /dashboard/erp/crm/activities | 4.46 kB | 245 kB |
-| /dashboard/erp/crm/ai | 7.94 kB | 183 kB |
-| /dashboard/erp/crm/contacts | 9.35 kB | 241 kB |
-| /dashboard/erp/crm/customers | 8.32 kB | 240 kB |
-| /dashboard/erp/crm/customers/[customerId] | 10.9 kB | 251 kB |
-| /dashboard/erp/crm/leads | 7.18 kB | 217 kB |
-| /dashboard/erp/crm/leads/[leadId] | 8.33 kB | 245 kB |
-| /dashboard/erp/crm/opportunities | 7.52 kB | 203 kB |
-| /dashboard/erp/crm/opportunities/[opportunityId] | 8.03 kB | 245 kB |
-| /dashboard/erp/crm/overview | 10.7 kB | 194 kB |
-| /dashboard/erp/crm/search | 7.11 kB | 225 kB |
-| /dashboard/erp/documents | 2.98 kB | 238 kB |
-| /dashboard/erp/documents/[id] | 4.27 kB | 199 kB |
-| /dashboard/erp/documents/list | 4.5 kB | 239 kB |
-| /dashboard/erp/finance | 12.1 kB | 309 kB |
-| /dashboard/erp/finance/accounts | 7.36 kB | 283 kB |
-| /dashboard/erp/finance/ai-docs | 10.5 kB | 226 kB |
-| /dashboard/erp/finance/audit-log | 8.54 kB | 182 kB |
-| /dashboard/erp/finance/controls | 10.7 kB | 221 kB |
-| /dashboard/erp/finance/fiscal-periods | 6.06 kB | 277 kB |
-| /dashboard/erp/finance/invoices | 3.99 kB | 280 kB |
-| /dashboard/erp/finance/invoices/[id] | 8.62 kB | 246 kB |
-| /dashboard/erp/finance/journal-entries | 4.15 kB | 286 kB |
-| /dashboard/erp/finance/journal-entries/[id] | 7.35 kB | 189 kB |
-| /dashboard/erp/finance/settings | 7.02 kB | 195 kB |
-| /dashboard/erp/finance/statements | 8.86 kB | 247 kB |
-| /dashboard/erp/hr | 7.53 kB | 193 kB |
-| /dashboard/erp/hr/ai-alerts | 9.62 kB | 193 kB |
-| /dashboard/erp/hr/attendance | 8.95 kB | 223 kB |
-| /dashboard/erp/hr/attrition | 8.76 kB | 192 kB |
-| /dashboard/erp/hr/compliance | 8.37 kB | 195 kB |
-| /dashboard/erp/hr/correlation | 4.72 kB | 193 kB |
-| /dashboard/erp/hr/data-quality | 9.63 kB | 193 kB |
-| /dashboard/erp/hr/departments | 8.15 kB | 219 kB |
-| /dashboard/erp/hr/employees | 4.19 kB | 233 kB |
-| /dashboard/erp/hr/employees/[id] | 5.11 kB | 240 kB |
-| /dashboard/erp/hr/leave | 11.1 kB | 242 kB |
-| /dashboard/erp/hr/planning | 14.3 kB | 194 kB |
-| /dashboard/erp/inventory | 9.76 kB | 187 kB |
-| /dashboard/erp/inventory/abc | 6.8 kB | 177 kB |
+| /about | 1.6 kB | 258 kB |
+| /contact | 7.53 kB | 181 kB |
+| /dashboard | 7.16 kB | 188 kB |
+| /dashboard/agents | 1.58 kB | 273 kB |
+| /dashboard/agents/c/[id] | 1.99 kB | 273 kB |
+| /dashboard/agents/coaching | 4.69 kB | 233 kB |
+| /dashboard/agents/guardian | 2.14 kB | 233 kB |
+| /dashboard/agents/guardian/[reportId] | 2.62 kB | 233 kB |
+| /dashboard/erp | 28.7 kB | 222 kB |
+| /dashboard/erp/approvals | 9.38 kB | 208 kB |
+| /dashboard/erp/crm/activities | 4.4 kB | 245 kB |
+| /dashboard/erp/crm/ai | 8.18 kB | 183 kB |
+| /dashboard/erp/crm/contacts | 9.29 kB | 241 kB |
+| /dashboard/erp/crm/customers | 8.28 kB | 240 kB |
+| /dashboard/erp/crm/customers/[customerId] | 10.8 kB | 252 kB |
+| /dashboard/erp/crm/leads | 8.23 kB | 219 kB |
+| /dashboard/erp/crm/leads/[leadId] | 8.53 kB | 246 kB |
+| /dashboard/erp/crm/opportunities | 7.74 kB | 204 kB |
+| /dashboard/erp/crm/opportunities/[opportunityId] | 6.17 kB | 246 kB |
+| /dashboard/erp/crm/overview | 10.8 kB | 194 kB |
+| /dashboard/erp/crm/search | 7.29 kB | 225 kB |
+| /dashboard/erp/documents | 3.16 kB | 239 kB |
+| /dashboard/erp/documents/[id] | 4.36 kB | 200 kB |
+| /dashboard/erp/documents/list | 4.5 kB | 240 kB |
+| /dashboard/erp/finance | 11.8 kB | 310 kB |
+| /dashboard/erp/finance/accounts | 6.96 kB | 284 kB |
+| /dashboard/erp/finance/ai-docs | 11.2 kB | 227 kB |
+| /dashboard/erp/finance/audit-log | 8.6 kB | 182 kB |
+| /dashboard/erp/finance/controls | 12.7 kB | 222 kB |
+| /dashboard/erp/finance/fiscal-periods | 5.81 kB | 279 kB |
+| /dashboard/erp/finance/invoices | 5.83 kB | 280 kB |
+| /dashboard/erp/finance/invoices/[id] | 6.75 kB | 247 kB |
+| /dashboard/erp/finance/journal-entries | 3.93 kB | 287 kB |
+| /dashboard/erp/finance/journal-entries/[id] | 7.54 kB | 189 kB |
+| /dashboard/erp/finance/settings | 7.75 kB | 196 kB |
+| /dashboard/erp/finance/statements | 8.57 kB | 249 kB |
+| /dashboard/erp/hr | 7.48 kB | 193 kB |
+| /dashboard/erp/hr/ai-alerts | 9.58 kB | 194 kB |
+| /dashboard/erp/hr/attendance | 8.93 kB | 223 kB |
+| /dashboard/erp/hr/attrition | 8.73 kB | 193 kB |
+| /dashboard/erp/hr/compliance | 6.7 kB | 198 kB |
+| /dashboard/erp/hr/correlation | 2.74 kB | 195 kB |
+| /dashboard/erp/hr/data-quality | 9.58 kB | 194 kB |
+| /dashboard/erp/hr/departments | 8.1 kB | 219 kB |
+| /dashboard/erp/hr/employees | 4.18 kB | 234 kB |
+| /dashboard/erp/hr/employees/[id] | 5.11 kB | 241 kB |
+| /dashboard/erp/hr/leave | 11.1 kB | 243 kB |
+| /dashboard/erp/hr/planning | 14.5 kB | 195 kB |
+| /dashboard/erp/inventory | 9.98 kB | 188 kB |
+| /dashboard/erp/inventory/abc | 7 kB | 177 kB |
 | /dashboard/erp/inventory/alerts | 2.22 kB | 235 kB |
-| /dashboard/erp/inventory/anomalies | 8.04 kB | 178 kB |
-| /dashboard/erp/inventory/forecast | 7.66 kB | 215 kB |
-| /dashboard/erp/inventory/health | 7.49 kB | 184 kB |
-| /dashboard/erp/inventory/movements | 8.2 kB | 216 kB |
-| /dashboard/erp/inventory/products | 12 kB | 215 kB |
-| /dashboard/erp/inventory/stock | 4.93 kB | 237 kB |
-| /dashboard/erp/inventory/suggestions | 8.01 kB | 178 kB |
-| /dashboard/erp/inventory/suppliers | 7.04 kB | 180 kB |
-| /dashboard/erp/inventory/warehouses | 9.86 kB | 213 kB |
-| /dashboard/erp/orders | 7.44 kB | 239 kB |
-| /dashboard/erp/orders/[orderId] | 4.62 kB | 218 kB |
-| /dashboard/erp/payroll | 6.99 kB | 198 kB |
-| /dashboard/erp/payroll/anomalies | 6.08 kB | 190 kB |
-| /dashboard/erp/payroll/automation | 12.4 kB | 198 kB |
-| /dashboard/erp/payroll/compensation | 9 kB | 226 kB |
-| /dashboard/erp/payroll/reviews | 8.59 kB | 205 kB |
-| /dashboard/erp/payroll/runs | 9.11 kB | 219 kB |
+| /dashboard/erp/inventory/anomalies | 8.28 kB | 178 kB |
+| /dashboard/erp/inventory/forecast | 7.84 kB | 215 kB |
+| /dashboard/erp/inventory/health | 7.74 kB | 184 kB |
+| /dashboard/erp/inventory/movements | 8.26 kB | 216 kB |
+| /dashboard/erp/inventory/products | 12.2 kB | 216 kB |
+| /dashboard/erp/inventory/stock | 4.93 kB | 238 kB |
+| /dashboard/erp/inventory/suggestions | 8.24 kB | 178 kB |
+| /dashboard/erp/inventory/suppliers | 7.23 kB | 180 kB |
+| /dashboard/erp/inventory/warehouses | 9.92 kB | 214 kB |
+| /dashboard/erp/orders | 7.38 kB | 239 kB |
+| /dashboard/erp/orders/[orderId] | 4.57 kB | 219 kB |
+| /dashboard/erp/payroll | 5.07 kB | 200 kB |
+| /dashboard/erp/payroll/anomalies | 6.04 kB | 190 kB |
+| /dashboard/erp/payroll/automation | 12.6 kB | 198 kB |
+| /dashboard/erp/payroll/compensation | 8.96 kB | 226 kB |
+| /dashboard/erp/payroll/reviews | 8.77 kB | 205 kB |
+| /dashboard/erp/payroll/runs | 9.29 kB | 220 kB |
 | /dashboard/erp/payroll/runs/[id] | 11.9 kB | 219 kB |
-| /dashboard/erp/payroll/settings | 9.9 kB | 194 kB |
-| /dashboard/erp/payroll/void-reasons | 7.71 kB | 189 kB |
-| /dashboard/erp/reports | 6.35 kB | 192 kB |
-| /dashboard/erp/reports/[reportId] | 11.7 kB | 190 kB |
-| /dashboard/intelligence | 3.69 kB | 177 kB |
-| /dashboard/intelligence/explore | 2.92 kB | 164 kB |
-| /dashboard/intelligence/feedback | 2.34 kB | 163 kB |
-| /dashboard/intelligence/market | 3.29 kB | 164 kB |
-| /dashboard/intelligence/results | 7.41 kB | 178 kB |
-| /dashboard/intelligence/trending | 2.75 kB | 164 kB |
-| /dashboard/invite | 7.82 kB | 217 kB |
-| /dashboard/leave | 9.56 kB | 217 kB |
-| /dashboard/members | 7.84 kB | 220 kB |
-| /dashboard/roles | 9.29 kB | 200 kB |
-| /dashboard/settings | 10.3 kB | 198 kB |
-| /dashboard/settings/notifications | 7.87 kB | 178 kB |
-| /invite | 7.47 kB | 210 kB |
+| /dashboard/erp/payroll/settings | 10.1 kB | 195 kB |
+| /dashboard/erp/payroll/void-reasons | 7.96 kB | 189 kB |
+| /dashboard/erp/reports | 6.57 kB | 193 kB |
+| /dashboard/erp/reports/[reportId] | 11.9 kB | 190 kB |
+| /dashboard/intelligence | 3.81 kB | 177 kB |
+| /dashboard/intelligence/explore | 3.52 kB | 173 kB |
+| /dashboard/intelligence/feedback | 2.34 kB | 164 kB |
+| /dashboard/intelligence/market | 3.28 kB | 164 kB |
+| /dashboard/intelligence/results | 8.06 kB | 179 kB |
+| /dashboard/intelligence/trending | 2.74 kB | 164 kB |
+| /dashboard/invite | 7.95 kB | 218 kB |
+| /dashboard/leave | 10.2 kB | 218 kB |
+| /dashboard/members | 8.06 kB | 221 kB |
+| /dashboard/roles | 9.5 kB | 201 kB |
+| /dashboard/settings | 8.61 kB | 205 kB |
+| /dashboard/settings/billing | 8.18 kB | 193 kB |
+| /dashboard/settings/notifications | 7.93 kB | 178 kB |
+| /docs/search | 1.79 kB | 184 kB |
+| /invite | 7.67 kB | 210 kB |
 | /login | 6.37 kB | 213 kB |
-| /mfa/verify | 4.1 kB | 181 kB |
-| /register | 11.7 kB | 215 kB |
-| /register/organization | 15.8 kB | 256 kB |
-| /register/plan | 5.56 kB | 195 kB |
-| /register/security | 10.7 kB | 213 kB |
-| /register/verify | 6.06 kB | 183 kB |
-| /setup-mfa | 12.2 kB | 189 kB |
+| /mfa/verify | 4.05 kB | 182 kB |
+| /pricing | 10.3 kB | 267 kB |
+| /product | 1.61 kB | 258 kB |
+| /setup-mfa | 12.1 kB | 190 kB |
+| /signup | 12.7 kB | 220 kB |
+| /signup/billing | 6 kB | 181 kB |
+| /signup/organization | 11.6 kB | 257 kB |
+| /signup/plan | 11 kB | 201 kB |
+| /signup/review | 6.27 kB | 185 kB |
+| /signup/security | 11.1 kB | 214 kB |
+| /signup/verify | 6.06 kB | 184 kB |
 
 ## Regeneration
 

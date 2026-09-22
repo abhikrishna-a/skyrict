@@ -301,7 +301,7 @@ function OrganizationStep({
             interval: selectedInterval,
             currency: selectedCurrency,
         });
-        router.push(`/register/billing?${next.toString()}`);
+        router.push(`/signup/billing?${next.toString()}`);
     }
 
     async function onSubmit(values: OrganizationValues) {

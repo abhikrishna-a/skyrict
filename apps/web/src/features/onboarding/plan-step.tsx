@@ -814,7 +814,7 @@ function PlanStep({
                     className="w-full"
                     onClick={() =>
                         router.push(
-                            `/register/security?${new URLSearchParams({ email, vt }).toString()}`,
+                            `/signup/security?${new URLSearchParams({ email, vt }).toString()}`,
                         )
                     }
                 >
@@ -844,7 +844,7 @@ function PlanStep({
                     className="w-full"
                     onClick={() =>
                         router.push(
-                            `/register/security?${new URLSearchParams({ email, vt }).toString()}`,
+                            `/signup/security?${new URLSearchParams({ email, vt }).toString()}`,
                         )
                     }
                 >
@@ -872,8 +872,8 @@ function PlanStep({
         }
         router.push(
             tenantId && slug
-                ? `/register/billing?${next.toString()}`
-                : `/register/organization?${next.toString()}`,
+                ? `/signup/billing?${next.toString()}`
+                : `/signup/organization?${next.toString()}`,
         );
     }
 

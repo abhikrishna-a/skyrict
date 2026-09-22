@@ -8,7 +8,7 @@ function Cta({
     title = "Make your first call on live signals.",
     description = "Create an account, connect your business, and Skyrict surfaces the market&apos;s next signal before it reaches your stock.",
     ctaLabel = "Get started",
-    ctaHref = "/register",
+    ctaHref = "/signup",
     secondaryCtaLabel = "Contact sales",
     secondaryCtaHref = "/contact",
 }: {

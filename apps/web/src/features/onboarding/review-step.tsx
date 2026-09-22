@@ -158,7 +158,7 @@ function ReviewStep({
                     className="w-full"
                     onClick={() => {
                         clearWizardSession();
-                        window.location.assign("/register");
+                        window.location.assign("/signup");
                     }}
                 >
                     Start over
@@ -268,7 +268,7 @@ function ReviewStep({
 
                     {isPaid && !charged ? (
                         <Link
-                            href={`/register/billing?${new URLSearchParams({
+                            href={`/signup/billing?${new URLSearchParams({
                                 plan: session.plan,
                                 interval: session.interval,
                                 currency: session.currency,

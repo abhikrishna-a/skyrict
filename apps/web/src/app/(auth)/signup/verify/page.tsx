@@ -1,37 +1,37 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { SecurityStep } from "@/features/onboarding/security-step";
+import { VerifyStep } from "@/features/onboarding/verify-step";
 import { AuthButton } from "@/lib/auth/AuthButton";
 
 export const metadata: Metadata = {
-    title: "Secure your account",
-    description: "Step 3 of 7 - choose a strong password.",
+    title: "Verify your email",
+    description: "Step 2 of 7 - confirm your email address.",
 };
 
-export default async function SecurityPage({
+export default async function VerifyPage({
     searchParams,
 }: {
-    searchParams: Promise<{ email?: string; vt?: string }>;
+    searchParams: Promise<{ email?: string }>;
 }) {
     const params = await searchParams;
     const email = params.email?.trim();
-    const vt = params.vt?.trim();
 
-    if (!email || !vt) {
+    if (!email) {
         return (
             <div className="space-y-4 text-center">
                 <div className="space-y-2">
                     <h1 className="font-display text-2xl font-semibold text-foreground">
-                        Session expired
+                        Let&apos;s start from the top
                     </h1>
                     <p className="text-sm text-muted-foreground">
-                        Your verification session is missing. Restart the flow
-                        to continue.
+                        Head back to step 1 to enter your work email.
                     </p>
                 </div>
-                <Link href="/register" className="block">
-                    <AuthButton className="w-full">Start over</AuthButton>
+                <Link href="/signup" className="block">
+                    <AuthButton className="w-full">
+                        Back to account details
+                    </AuthButton>
                 </Link>
             </div>
         );
@@ -41,18 +41,17 @@ export default async function SecurityPage({
         <div className="space-y-6">
             <div className="space-y-2">
                 <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
-                    Step 3 of 7 · Security
+                    Step 2 of 7 · Verification
                 </p>
                 <h1 className="font-display text-2xl font-semibold text-foreground">
-                    Protect your account
+                    Check your inbox
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                    Use at least 12 characters with uppercase, lowercase, a
-                    number, and a special character.
+                    We sent a 6-digit code to confirm it&apos;s really you.
                 </p>
             </div>
 
-            <SecurityStep email={email} vt={vt} />
+            <VerifyStep email={email} />
         </div>
     );
 }

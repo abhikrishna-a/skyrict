@@ -83,7 +83,7 @@ function SecurityStep({ email, vt }: { email: string; vt: string }) {
             .then(() => {
                 setWizardCredentials({ email, password: values.password });
                 const next = new URLSearchParams({ email, vt });
-                router.push(`/register/plan?${next.toString()}`);
+                router.push(`/signup/plan?${next.toString()}`);
             })
             .catch((error: unknown) => {
                 if (

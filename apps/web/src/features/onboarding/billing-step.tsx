@@ -187,7 +187,7 @@ function BillingStep({
             interval: session.interval as string,
             currency: session.currency,
         });
-        router.push(`/register/review?${next.toString()}`);
+        router.push(`/signup/review?${next.toString()}`);
     }
 
     function handleChangePlan() {
@@ -198,7 +198,7 @@ function BillingStep({
             tenantId: session.tenantId,
             slug: session.slug,
         });
-        router.push(`/register/plan?${next.toString()}`);
+        router.push(`/signup/plan?${next.toString()}`);
     }
 
     if (!contextComplete) {
@@ -217,7 +217,7 @@ function BillingStep({
                     className="w-full"
                     onClick={() => {
                         clearWizardSession();
-                        router.push("/register");
+                        router.push("/signup");
                     }}
                 >
                     Start over
@@ -374,7 +374,7 @@ function BillingStep({
                 type="button"
                 onClick={() =>
                     router.push(
-                        `/register/plan?${new URLSearchParams({ email: session.email, vt: session.vt, tenantId: session.tenantId, slug: session.slug }).toString()}`,
+                        `/signup/plan?${new URLSearchParams({ email: session.email, vt: session.vt, tenantId: session.tenantId, slug: session.slug }).toString()}`,
                     )
                 }
                 className="flex items-center justify-center gap-1.5 text-sm text-muted-foreground underline-offset-4 hover:text-foreground hover:underline outline-none"

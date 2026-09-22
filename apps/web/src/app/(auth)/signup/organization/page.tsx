@@ -1,35 +1,31 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { PlanStep } from "@/features/onboarding/plan-step";
+import { OrganizationStep } from "@/features/onboarding/organization-step";
 import { AuthButton } from "@/lib/auth/AuthButton";
-import { resolvePricingContext } from "@/lib/server/geo";
-
-export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-    title: "Choose a plan",
-    description: "Step 4 of 7 - pick the plan that fits your business.",
+    title: "Your organization",
+    description: "Step 5 of 7 - connect your business details.",
 };
 
-export default async function PlanPage({
+export default async function OrganizationPage({
     searchParams,
 }: {
     searchParams: Promise<{
         email?: string;
         vt?: string;
-        tenantId?: string;
-        slug?: string;
+        plan?: string;
+        interval?: string;
+        currency?: string;
     }>;
 }) {
-    const [params, pricing] = await Promise.all([
-        searchParams,
-        resolvePricingContext(),
-    ]);
+    const params = await searchParams;
     const email = params.email?.trim();
     const vt = params.vt?.trim();
-    const tenantId = params.tenantId?.trim();
-    const slug = params.slug?.trim();
+    const plan = params.plan?.trim();
+    const interval = params.interval?.trim();
+    const currency = params.currency?.trim();
 
     if (!email || !vt) {
         return (
@@ -43,7 +39,7 @@ export default async function PlanPage({
                         continue.
                     </p>
                 </div>
-                <Link href="/register" className="block">
+                <Link href="/signup" className="block">
                     <AuthButton className="w-full">Start over</AuthButton>
                 </Link>
             </div>
@@ -51,28 +47,26 @@ export default async function PlanPage({
     }
 
     return (
-        <div className="space-y-5">
-            <div className="space-y-1.5 text-center">
+        <div className="space-y-6">
+            <div className="space-y-2">
                 <p className="font-mono text-xs uppercase tracking-[0.2em] text-primary">
-                    Step 4 of 7 · Plan
+                    Step 5 of 7 · Organization
                 </p>
                 <h1 className="font-display text-2xl font-semibold text-foreground">
-                    Choose your plan
+                    Tell us about your business
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                    Start free and upgrade as your business grows. You can
-                    change plans anytime.
+                    We&apos;ll wire this into your workspace so agents know the
+                    context.
                 </p>
             </div>
 
-            <PlanStep
+            <OrganizationStep
                 email={email}
                 vt={vt}
-                tenantId={tenantId}
-                slug={slug}
-                initialCurrency={pricing.currency}
-                initialCountry={pricing.country}
-                marketAvailable={pricing.available}
+                plan={plan}
+                interval={interval}
+                currency={currency}
             />
         </div>
     );

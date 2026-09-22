@@ -265,7 +265,7 @@ export default function ProductPage() {
                         </p>
                         <div className="flex flex-col items-center justify-center gap-3 pt-2 sm:flex-row">
                             <Button size="lg" asChild>
-                                <Link href="/register">Create your account</Link>
+                                <Link href="/signup">Create your account</Link>
                             </Button>
                             <Button variant="outline" size="lg" asChild>
                                 <Link href="/docs">

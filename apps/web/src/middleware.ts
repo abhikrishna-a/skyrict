@@ -6,8 +6,8 @@
  * TenantResolver), rejects unknown hosts, and rewrites public paths to their
  * internal routes:
  *
- *   marketing  web.localhost            `/`            → landing (register-only)
- *   signup     signup.localhost         `/signup`      → `/register`
+ *   marketing  web.localhost            `/`            → landing (signup-only)
+ *   signup     signup.localhost         `/signup`      → `/signup`
  *   signin     {slug}.signin.localhost  `/signin`      → `/login`
  *   workspace  {slug}.localhost         `/`, `/agents` → `/dashboard/…`
  *
@@ -42,6 +42,7 @@ function isLegalPath(pathname: string): boolean {
 function isAuthPath(pathname: string): boolean {
     return (
         AUTH_PATHS.includes(pathname) ||
+        pathname.startsWith("/signup/") ||
         pathname.startsWith("/register/") ||
         pathname.startsWith("/mfa/")
     );
@@ -105,7 +106,7 @@ export function middleware(request: NextRequest) {
 
     switch (surface) {
         case "marketing": {
-            // Register-only marketing site: auth paths leave via the signup origin.
+            // Signup-only marketing site: auth paths leave via the signup origin.
             if (isAuthPath(pathname) || pathname.startsWith("/dashboard")) {
                 return NextResponse.redirect(
                     new URL(signupOrigin(request), request.url),
@@ -114,8 +115,16 @@ export function middleware(request: NextRequest) {
             return NextResponse.next();
         }
         case "signup": {
-            if (pathname === "/signup") {
-                return NextResponse.rewrite(new URL("/register", request.url));
+            // Legacy /register URL: move callers to the /signup route so old
+            // bookmarks and in-flight emails keep working.
+            if (pathname === "/register" || pathname.startsWith("/register/")) {
+                return NextResponse.redirect(
+                    new URL(
+                        pathname.replace(/^\/register/, "/signup"),
+                        request.url,
+                    ),
+                    { status: 308 },
+                );
             }
             if (isAuthPath(pathname) || isLegalPath(pathname)) {
                 return NextResponse.next();

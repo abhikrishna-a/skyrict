@@ -1,7 +1,7 @@
 /*
  * Multi-tenant onboarding driver for the E2E harness.
  *
- * Drives the real signup wizard (signup surface, /register) end to end
+ * Drives the real signup wizard (signup surface, /signup) end to end
  * through the browser: email step -> OTP verification -> password + text
  * CAPTCHA -> plan -> organization -> billing (free Starter path) -> review
  * -> signin redirect.
@@ -84,7 +84,7 @@ export async function registerTenant(
 
     /* ---------- account step ---------- */
 
-    await page.goto(`${signupUrl()}/register`);
+    await page.goto(`${signupUrl()}/signup`);
     await page.getByLabel("Work email").fill(input.email);
     // Without a Turnstile site key (ENVIRONMENT=test) the risk challenge is a
     // plain checkbox that runs the normal solve-captcha affordance on check.
@@ -93,7 +93,7 @@ export async function registerTenant(
         .waitFor({ timeout: 15_000 });
     await page.getByRole("checkbox", { name: "I'm not a robot" }).check();
     await page.getByRole("button", { name: "Continue with email" }).click();
-    await page.waitForURL("**/register/verify**");
+    await page.waitForURL("**/signup/verify**");
 
     /* ---------- verify step (OTP auto-sent on mount) ---------- */
 
@@ -107,7 +107,7 @@ export async function registerTenant(
         })
         .toBeTruthy();
     await fillOtp(page, "Verification code", verificationCode ?? "");
-    await page.waitForURL("**/register/security**");
+    await page.waitForURL("**/signup/security**");
 
     /* ---------- security step (password + text CAPTCHA) ---------- */
 
@@ -166,7 +166,7 @@ export async function registerTenant(
     }
 
     await page.getByRole("button", { name: "Continue" }).click();
-    await page.waitForURL("**/register/plan**");
+    await page.waitForURL("**/signup/plan**");
 
     /* ---------- plan step (before organization creation) ---------- */
 
@@ -175,7 +175,7 @@ export async function registerTenant(
     await page
         .getByRole("button", { name: "Continue with Starter" })
         .click();
-    await page.waitForURL("**/register/organization**");
+    await page.waitForURL("**/signup/organization**");
 
     /* ---------- organization step ---------- */
 
@@ -213,12 +213,12 @@ export async function registerTenant(
 
     // Creation triggers a provisioning screen (a ~10.4s sequence of timers) that
     // then hands off to the billing step with the tenant context in the URL.
-    await page.waitForURL("**/register/billing**", { timeout: 45_000 });
+    await page.waitForURL("**/signup/billing**", { timeout: 45_000 });
 
     /* ---------- billing step (free Starter path) ---------- */
 
     await page.getByRole("button", { name: "Continue for free" }).click();
-    await page.waitForURL("**/register/review**");
+    await page.waitForURL("**/signup/review**");
 
     /* ---------- review step ---------- */
 

@@ -177,14 +177,14 @@ function moduleChips(plan: BillingPlan, max = 3) {
 function planCta(plan: BillingPlan): { label: string; href: string } {
     switch (plan.id) {
         case "starter":
-            return { label: "Start free", href: "/register" };
+            return { label: "Start free", href: "/signup" };
         case "enterprise":
             return {
                 label: "Contact sales",
                 href: "mailto:sales@skyrict.com?subject=Enterprise plan",
             };
         default:
-            return { label: "Start 14-day trial", href: "/register" };
+            return { label: "Start 14-day trial", href: "/signup" };
     }
 }
 
