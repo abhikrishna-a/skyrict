@@ -1,9 +1,10 @@
+import { AiGlyph } from "@/components/brand/logo";
+
 import {
     Boxes,
     Bot,
     LayoutDashboard,
     Settings2,
-    Sparkles,
     UserPlus,
     UserRound,
     Users,
@@ -15,7 +16,7 @@ export type TourPlacement = "top" | "right" | "bottom" | "left";
 export interface TourStep {
     /** Value of the `data-tour` attribute on the element to highlight. */
     target: string;
-    icon: LucideIcon;
+    icon: LucideIcon | typeof AiGlyph;
     title: string;
     description: string;
     placement: TourPlacement;
@@ -50,7 +51,7 @@ export const tourSteps: TourStep[] = [
     },
     {
         target: "card-intelligence",
-        icon: Sparkles,
+        icon: AiGlyph,
         title: "Market Intelligence",
         description:
             "Market research that turns external signals into decisions - search like you would the web, but for your business.",

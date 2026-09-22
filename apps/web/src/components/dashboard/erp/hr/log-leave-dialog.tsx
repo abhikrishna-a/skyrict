@@ -1,8 +1,9 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useMemo, useState } from "react";
-import { Sparkles } from "lucide-react";
+
 
 import { Button } from "@/components/ui/button";
 import {
@@ -236,7 +237,7 @@ export function LogLeaveDialog({
                                             className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border bg-muted/40 px-3 py-2"
                                         >
                                             <div className="flex min-w-0 items-start gap-2">
-                                                <Sparkles
+                                                <AiGlyph
                                                     aria-hidden="true"
                                                     className="mt-0.5 size-3.5 shrink-0 text-primary"
                                                 />

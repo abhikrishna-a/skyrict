@@ -1,4 +1,5 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -8,10 +9,9 @@ import {
     FileCheck2,
     FileText,
     MessageCircleQuestion,
-    Plus,
     Search,
-    Sparkles,
     X,
+    type LucideIcon,
 } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
@@ -74,7 +74,7 @@ function WidgetCard({
     description,
     children,
 }: {
-    icon: typeof Sparkles;
+    icon: LucideIcon | typeof AiGlyph;
     title: string;
     description: string;
     children: ReactNode;
@@ -139,7 +139,7 @@ function ActionButton({
 }: {
     busy: boolean;
     label: string;
-    icon: typeof Plus;
+    icon: LucideIcon | typeof AiGlyph;
     variant?: "default" | "outline";
     onClick: () => void;
 }) {
@@ -350,7 +350,7 @@ function TaxSummaryWidget({ canApprove }: { canApprove: boolean }) {
                     <ActionButton
                         busy={generating}
                         label="Generate"
-                        icon={Sparkles}
+                        icon={AiGlyph}
                         variant="default"
                         onClick={() => void generate()}
                     />
@@ -714,7 +714,7 @@ function AuditNarrationWidget() {
                     <ActionButton
                         busy={busy}
                         label="Narrate"
-                        icon={Sparkles}
+                        icon={AiGlyph}
                         variant="default"
                         onClick={() => void generate()}
                     />
@@ -893,7 +893,7 @@ export function FinanceAiDocs() {
             <PageHeader
                 title="Document & Tax AI"
                 description="AI-generated tax summaries, finance document packs, audit narration, and grounded document Q&A."
-                icon={Sparkles}
+                icon={AiGlyph}
             />
             <TaxSummaryWidget canApprove={canApprove} />
             <DocPacksWidget canApprove={canApprove} />

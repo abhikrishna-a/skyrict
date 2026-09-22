@@ -1,8 +1,9 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useEffect, useState } from "react";
-import { ShieldCheck, Sparkles } from "lucide-react";
+import { ShieldCheck } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { TurnstileWidget } from "@/components/onboarding/turnstile-widget";
@@ -137,7 +138,7 @@ function RiskChallenge({
                         />
                     )}
                     {state === "verified" && (
-                        <Sparkles
+                        <AiGlyph
                             aria-hidden="true"
                             className="ml-auto size-4 text-primary"
                         />
@@ -146,7 +147,7 @@ function RiskChallenge({
             </div>
             <div className="mt-2 flex items-center justify-between border-t border-border/70 pt-2">
                 <p className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                    <Sparkles aria-hidden="true" className="size-3" />
+                    <AiGlyph aria-hidden="true" className="size-3" />
                     Skyrict Shield
                 </p>
                 <p className="font-mono text-[10px] text-muted-foreground">

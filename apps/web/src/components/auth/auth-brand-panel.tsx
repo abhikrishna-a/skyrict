@@ -1,6 +1,6 @@
-import { Boxes, Globe, Sparkles } from "lucide-react";
+import { Boxes, Globe } from "lucide-react";
 
-import { Logo } from "@/components/brand/logo";
+import { Logo, AiGlyph } from "@/components/brand/logo";
 
 const authValueProps = [
     {
@@ -14,7 +14,7 @@ const authValueProps = [
         body: "Demand signals pulled continuously from Google Trends, YouTube, Reddit, GitHub, and news.",
     },
     {
-        icon: Sparkles,
+        icon: AiGlyph,
         title: "Agents that act",
         body: "AI that reasons across both sides at once - and answers what no single tool can.",
     },

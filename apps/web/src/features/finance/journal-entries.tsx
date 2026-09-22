@@ -1,4 +1,5 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -17,7 +18,6 @@ import {
     CircleCheck,
     NotebookPen,
     Plus,
-    Sparkles,
     Trash2,
     TriangleAlert,
 } from "lucide-react";
@@ -578,7 +578,7 @@ function CreateJournalEntryDialog({
                                             className="size-3.5"
                                         />
                                     ) : (
-                                        <Sparkles
+                                        <AiGlyph
                                             aria-hidden="true"
                                             className="size-3.5"
                                         />
@@ -599,7 +599,7 @@ function CreateJournalEntryDialog({
 
                     {memoSuggestion ? (
                         <div className="flex items-center gap-3 rounded-lg border border-dashed border-primary/40 bg-primary/5 p-3 text-sm">
-                            <Sparkles
+                            <AiGlyph
                                 aria-hidden="true"
                                 className="size-4 shrink-0 text-primary"
                             />
@@ -1137,7 +1137,7 @@ function FinanceJournalEntries() {
                                     size="sm"
                                     onClick={() => setAiDraftOpen(true)}
                                 >
-                                    <Sparkles className="size-3.5" />
+                                    <AiGlyph className="size-3.5" />
                                     AI Draft
                                 </Button>
                                 <CreateJournalEntryDialog

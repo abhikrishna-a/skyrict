@@ -1,8 +1,9 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
-import { SlidersHorizontal, Sparkles } from "lucide-react";
+import { SlidersHorizontal } from "lucide-react";
 
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import { Button } from "@/components/ui/button";
@@ -195,7 +196,7 @@ export function FinanceSettings() {
                                     className="size-4"
                                 />
                             ) : (
-                                <Sparkles
+                                <AiGlyph
                                     aria-hidden="true"
                                     className="size-4"
                                 />

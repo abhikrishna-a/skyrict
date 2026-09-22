@@ -1,9 +1,10 @@
+import { AiGlyph } from "@/components/brand/logo";
+
 import {
     Activity,
     ArrowRight,
     Boxes,
     Globe,
-    Sparkles,
     type LucideIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -50,7 +51,7 @@ function ConsoleNode({
     sub,
     tone = "default",
 }: {
-    icon: LucideIcon;
+    icon: LucideIcon | typeof AiGlyph;
     label: string;
     sub: string;
     tone?: "default" | "highlight";
@@ -176,7 +177,7 @@ function SignalConsole() {
                         />
                         <NodeLink label="acts" />
                         <ConsoleNode
-                            icon={Sparkles}
+                            icon={AiGlyph}
                             label="AgentInsight"
                             sub="your next move, reasoned"
                         />

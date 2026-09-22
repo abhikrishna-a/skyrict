@@ -1,19 +1,19 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowUpRight,
-  BarChart3,
-  ChevronRight,
-  PencilLine,
-  Save,
-  Search,
-  Send,
-  Sparkles,
-  TriangleAlert,
+    ArrowUpRight,
+    BarChart3,
+    ChevronRight,
+    PencilLine,
+    Save,
+    Search,
+    Send,
+    TriangleAlert,
 } from "lucide-react";
 
 import { EmptyState } from "@/components/dashboard/erp/empty-state";
@@ -224,7 +224,7 @@ export function ReportsWorkspace() {
           <div className="p-4 sm:p-5">
             <div className="flex items-start gap-3">
               <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/15 bg-primary/10 text-primary">
-                <Sparkles aria-hidden="true" className="size-4" />
+                <AiGlyph aria-hidden="true" className="size-4" />
               </div>
               <div className="min-w-0 flex-1">
                 <p className="font-display text-[0.65rem] font-semibold tracking-wider uppercase text-muted-foreground">
@@ -429,7 +429,7 @@ export function ReportsWorkspace() {
                 role="status"
                 className="mt-4 flex items-start gap-2.5 rounded-xl border border-border bg-muted/40 px-4 py-3"
               >
-                <Sparkles
+                <AiGlyph
                   aria-hidden="true"
                   className="mt-0.5 size-4 shrink-0 text-primary"
                 />

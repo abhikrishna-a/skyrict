@@ -1,4 +1,5 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState, type ReactNode } from "react";
@@ -15,12 +16,10 @@ import {
     Repeat,
     ScanSearch,
     ShieldCheck,
-    Sparkles,
     SquarePen,
     Trash2,
     TrendingUp,
     TriangleAlert,
-    Wand2,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -191,7 +190,7 @@ export function HealthScoreCard({ score }: { score: HealthScore }) {
     return (
         <WidgetCard
             title="Financial health"
-            icon={<Sparkles aria-hidden="true" className="size-4" />}
+            icon={<AiGlyph aria-hidden="true" className="size-4" />}
             hint="Weighted score out of 100"
             action={
                 <span
@@ -448,7 +447,7 @@ export function AnomalyFeed({
                                             className="size-3"
                                         />
                                     ) : (
-                                        <Sparkles
+                                        <AiGlyph
                                             aria-hidden="true"
                                             className="size-3"
                                         />
@@ -866,7 +865,7 @@ export function SuggestAccountCode({
     return (
         <div className="rounded-xl border border-border bg-card p-4">
             <div className="flex items-center gap-2">
-                <Wand2 aria-hidden="true" className="size-4 text-primary" />
+                <AiGlyph aria-hidden="true" className="size-4 text-primary" />
                 <h3 className="font-display text-sm font-semibold text-foreground">
                     Suggest account code
                 </h3>
@@ -904,7 +903,7 @@ export function SuggestAccountCode({
                             className="size-4"
                         />
                     ) : (
-                        <Wand2 aria-hidden="true" className="size-4" />
+                        <AiGlyph aria-hidden="true" className="size-4" />
                     )}
                     Suggest
                 </Button>

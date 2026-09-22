@@ -1,8 +1,9 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
-import { Info, RefreshCw, Sparkles, TriangleAlert } from "lucide-react";
+import { Info, RefreshCw, TriangleAlert } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -170,7 +171,7 @@ export function L3NarrativeCard({
                     variant="outline"
                     className="border-indigo-500/30 bg-indigo-500/10 text-indigo-700 dark:text-indigo-400"
                 >
-                    <Sparkles aria-hidden="true" className="size-3" />
+                    <AiGlyph aria-hidden="true" className="size-3" />
                     L3 AI
                 </Badge>
                 {narrative.source ? (

@@ -1,4 +1,5 @@
 import { normalizeDashboardPath } from "@/lib/dashboard-path";
+import { AiGlyph } from "@/components/brand/logo";
 import {
     Activity,
     AlertTriangle,
@@ -32,7 +33,6 @@ import {
     ShieldAlert,
     ShoppingCart,
     SlidersHorizontal,
-    Sparkles,
     TrendingDown,
     TrendingUp,
     UserPlus,
@@ -46,7 +46,7 @@ import {
 export interface NavItem {
     href: string;
     label: string;
-    icon: LucideIcon;
+    icon: LucideIcon | typeof AiGlyph;
     /** Permission key that gates this item (absent = always visible inside its world). */
     permission?: string;
     soon?: boolean;
@@ -224,7 +224,7 @@ export const erpNavGroups: NavGroup[] = [
                     {
                         href: "/erp/crm/ai",
                         label: "AI Insights",
-                        icon: Sparkles,
+                        icon: AiGlyph,
                         permission: "erp.crm.read",
                     },
                     {
@@ -431,7 +431,7 @@ export const erpNavGroups: NavGroup[] = [
                     {
                         href: "/erp/finance/ai-docs",
                         label: "AI Docs",
-                        icon: Sparkles,
+                        icon: AiGlyph,
                         permission: "erp.finance.ai.read",
                     },
                     {

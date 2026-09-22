@@ -11,12 +11,11 @@ import {
     Pin,
     PinOff,
     ShieldCheck,
-    Sparkles,
     SquarePen,
     Trash2,
 } from "lucide-react";
 
-import { Logo } from "@/components/brand/logo";
+import { Logo, AiGlyph } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
 import { UserMenu } from "@/components/dashboard/workspace/user-menu";
 import {
@@ -378,7 +377,7 @@ export function AgentsChatSidebar({
                                         : "text-muted-foreground hover:text-foreground",
                                 )}
                             >
-                                <Sparkles
+                                <AiGlyph
                                     aria-hidden="true"
                                     className="size-4"
                                 />
@@ -432,7 +431,7 @@ export function AgentsChatSidebar({
                                         "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
                                 )}
                             >
-                                <Sparkles
+                                <AiGlyph
                                     aria-hidden="true"
                                     className="size-4 shrink-0"
                                 />
