@@ -575,3 +575,210 @@ def render_security_alert_text(alert: SecurityAlert) -> str:
         f"This is an automated security notification. For help, contact {alert.support_email}.",
     ]
     return "\n".join(lines)
+
+
+# --------------------------------------------------------------------------- #
+# Invitation / join-workspace email templates
+# --------------------------------------------------------------------------- #
+
+_INVITATION_TEMPLATE = Template(
+    """<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta http-equiv="X-UA-Compatible" content="IE=edge">
+<meta name="color-scheme" content="light">
+<meta name="supported-color-schemes" content="light">
+<title>You're invited to join ${org_name} on ${app_name}</title>
+<style>
+  body,table,td,a,p { -webkit-text-size-adjust:100%; }
+  body { margin:0; padding:0; background:#f4f7f9; }
+  @media only screen and (max-width:480px) {
+    .container { width:100% !important; }
+    .mobile-pad { padding-left:20px !important; padding-right:20px !important; }
+    .heading { font-size:21px !important; line-height:27px !important; }
+    .token-box { font-size:14px !important; letter-spacing:0.2px !important; }
+  }
+</style>
+</head>
+<body style="margin:0;padding:0;background:#f4f7f9;">
+  <center role="article" aria-roledescription="email" aria-label="Invitation to ${app_name}" style="width:100%;table-layout:fixed;-webkit-text-size-adjust:100%;-ms-text-size-adjust:100%;background:#f4f7f9;">
+    <table role="presentation" class="container" width="600" cellpadding="0" cellspacing="0" border="0" align="center" style="width:600px;max-width:600px;margin:0 auto;">
+
+      <!-- Logo -->
+      <tr><td style="padding:36px 24px 8px;">${header_logo}</td></tr>
+
+      <!-- Card -->
+      <tr>
+        <td style="padding:12px 24px 8px;">
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"
+                 style="background:#ffffff;border:1px solid #e6edf2;border-radius:16px;box-shadow:0 6px 24px rgba(15,47,63,0.06);">
+
+            <!-- Invitation badge -->
+            <tr>
+              <td class="mobile-pad" style="padding:28px 32px 0;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="padding:5px 14px;border-radius:999px;background:#eaf6fc;border:1px solid #cfeafa;">
+                      <span style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:11px;font-weight:700;letter-spacing:0.9px;text-transform:uppercase;color:#14708f;">Invitation</span>
+                    </td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Title -->
+            <tr>
+              <td class="mobile-pad" style="padding:16px 32px 0;">
+                <h1 class="heading" style="margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:24px;line-height:30px;font-weight:700;color:#0a2f3e;letter-spacing:-0.2px;">You're invited to join <span style="color:#14708f;">${org_name}</span></h1>
+              </td>
+            </tr>
+
+            <!-- Description -->
+            <tr>
+              <td class="mobile-pad" style="padding:12px 32px 0;">
+                <p style="margin:0;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:14px;line-height:22px;color:#5b6b77;">${inviter_name} has invited you to join their workspace on ${app_name}. Accept the invitation to get started.</p>
+              </td>
+            </tr>
+
+            <!-- Action: button when a link exists, otherwise the token -->
+            ${action_block}
+
+            <!-- Plain-text fallback link -->
+            ${fallback_block}
+
+            <!-- Expiry note -->
+            <tr>
+              <td class="mobile-pad" style="padding:16px 32px 0;">
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <tr>
+                    <td style="padding-right:8px;vertical-align:middle;color:#14708f;">
+                      <svg width="16" height="16" viewBox="0 0 18 18" fill="none" role="presentation" aria-hidden="true" style="display:block">
+                        <g stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M9 2.6l5.5 2v4.1c0 3.6-2.3 6.4-5.5 7.7-3.2-1.3-5.5-4.1-5.5-7.7V4.6l5.5-2Z"/>
+                          <path d="M6.4 9.2l1.8 1.8 3.4-3.5"/>
+                        </g>
+                      </svg>
+                    </td>
+                    <td style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:13px;line-height:18px;color:#8798a5;">This invitation is <strong style="color:#0a2f3e;">single-use</strong> and expires automatically. If you weren't expecting this invitation, you can safely ignore this email.</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+
+            <!-- Footer inside card -->
+            <tr>
+              <td class="mobile-pad" style="padding:24px 32px 24px;">
+                <div style="border-top:1px solid #eef3f6;padding-top:16px;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:12px;line-height:18px;color:#8798a5;">
+                  This invitation was sent to you because ${inviter_name} invited you to join ${org_name} on ${app_name}.
+                </div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+
+      <!-- Outer footer -->
+      <tr>
+        <td style="padding:20px 24px 40px;">
+          <div style="text-align:center;font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;font-size:11px;line-height:17px;color:#9aacb8;">
+            Sent by ${app_name}<br>
+            &copy; ${year} Skyrict Technologies. All rights reserved.
+          </div>
+        </td>
+      </tr>
+    </table>
+  </center>
+</body>
+</html>
+"""
+)
+
+
+def _invitation_action_block(*, link: str | None, token: str) -> str:
+    """Primary CTA: a button when a link is available, else a token box."""
+    if link:
+        return (
+            '<tr><td class="mobile-pad" style="padding:24px 32px 0;">'
+            + _button(link, "Accept invitation", primary=True)
+            + "</td></tr>"
+        )
+    return (
+        '<tr><td class="mobile-pad" style="padding:24px 32px 0;">'
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" '
+        'style="background:#f4f9fb;border:1px solid #dce9ef;border-radius:12px;">'
+        '<tr><td align="center" valign="middle" style="padding:18px 16px;">'
+        f'<span class="token-box" style="'
+        "font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;"
+        f'font-size:16px;font-weight:700;color:#0a2f3e;letter-spacing:0.5px;word-break:break-all;">'
+        f"{_esc(token)}</span></td></tr></table></td></tr>"
+    )
+
+
+def _invitation_fallback_block(*, link: str | None) -> str:
+    """Plain-text fallback link shown under the CTA when a link exists."""
+    if not link:
+        return ""
+    return (
+        '<tr><td class="mobile-pad" style="padding:14px 32px 0;">'
+        '<div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;'
+        'font-size:11px;font-weight:700;letter-spacing:0.9px;text-transform:uppercase;color:#14708f;">'
+        "If the button doesn't work</div>"
+        '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:6px;">'
+        '<tr><td class="token-box" style="background:#f4f9fb;border:1px solid #dce9ef;border-radius:10px;padding:12px 14px;'
+        "font-family:'SF Mono',SFMono-Regular,Menlo,Consolas,'Liberation Mono',monospace;"
+        f'font-size:12px;line-height:18px;color:#0a2f3e;word-break:break-all;">{_esc(link)}</td></tr>'
+        "</table></td></tr>"
+    )
+
+
+def render_invitation_html(
+    *,
+    inviter_name: str,
+    organization_name: str,
+    token: str,
+    base_url: str | None = None,
+    app_name: str = APP_NAME,
+) -> str:
+    """Render the full HTML email body for a workspace invitation."""
+    link = f"{base_url.rstrip('/')}?token={token}" if base_url else None
+    mapping = {
+        "app_name": _esc(app_name),
+        "org_name": _esc(organization_name or app_name),
+        "inviter_name": _esc(inviter_name or app_name),
+        "year": str(datetime.now(UTC).year),
+        "header_logo": _logo_block(),
+        "action_block": _invitation_action_block(link=link, token=token),
+        "fallback_block": _invitation_fallback_block(link=link),
+    }
+    return _INVITATION_TEMPLATE.safe_substitute(mapping)
+
+
+def render_invitation_text(
+    *,
+    inviter_name: str,
+    organization_name: str,
+    token: str,
+    base_url: str | None = None,
+    app_name: str = APP_NAME,
+) -> str:
+    """Render a clean plaintext fallback for the same invitation."""
+    lines = [
+        f"Join {organization_name or app_name} on {app_name}",
+        "",
+        f"{inviter_name} has invited you to join their workspace on {app_name}.",
+        "",
+    ]
+    if base_url:
+        link = f"{base_url.rstrip('/')}?token={token}"
+        lines += [f"Accept the invitation: {link}", ""]
+    else:
+        lines += [f"Your invitation token is: {token}", ""]
+    lines += [
+        "This invitation is single-use and expires automatically.",
+        "If you weren't expecting this invitation, you can safely ignore this email.",
+        "",
+        f"Sent by {app_name}",
+    ]
+    return "\n".join(lines)

@@ -22,6 +22,8 @@ import structlog
 
 from identity.core.email_templates import (
     SecurityAlert,
+    render_invitation_html,
+    render_invitation_text,
     render_otp_html,
     render_otp_text,
     render_security_alert_html,
@@ -170,28 +172,25 @@ class SmtpEmailService:
         token: str,
         base_url: str | None = None,
     ) -> None:
-        if base_url:
-            link = f"{base_url.rstrip('/')}?token={token}"
-            text = (
-                f"{inviter_name} invited you to {organization_name}.\n\n"
-                f"Accept the invitation here:\n\n{link}"
-            )
-            html = (
-                f"<p>{inviter_name} invited you to "
-                f"<strong>{organization_name}</strong>.</p>"
-                f'<p><a href="{link}">Accept invitation</a></p>'
-            )
-        else:
-            text = (
-                f"{inviter_name} invited you to {organization_name}.\n\n"
-                f"Your invitation token is {token}."
-            )
-            html = (
-                f"<p>{inviter_name} invited you to "
-                f"<strong>{organization_name}</strong>.</p>"
-                f"<p>Your invitation token is <strong>{token}</strong>.</p>"
-            )
-        await self._deliver(to, f"{inviter_name} invited you to {organization_name}", text, html)
+        html = render_invitation_html(
+            inviter_name=inviter_name,
+            organization_name=organization_name,
+            token=token,
+            base_url=base_url,
+        )
+        text = render_invitation_text(
+            inviter_name=inviter_name,
+            organization_name=organization_name,
+            token=token,
+            base_url=base_url,
+        )
+        org = organization_name or "Skyrict"
+        await self._deliver(
+            to,
+            f"{inviter_name} invited you to join {org} on Skyrict",
+            text,
+            html,
+        )
 
     async def send_security_alert(self, *, alert: SecurityAlert) -> None:
         text = render_security_alert_text(alert)
