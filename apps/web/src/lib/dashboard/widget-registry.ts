@@ -39,9 +39,9 @@ export interface WidgetDefinition {
 /**
  * Canonical list of available widgets. Order here prioritizes:
  * 1. Attention & Exceptions strip
- * 2. Cross-Module KPI Snapshot (Finance & Operations clusters)
- * 3. Module Quick Links
- * 4. Collapsible Intelligence Digest
+ * 2. Business Pulse (daily brief)
+ * 3. Cross-Module KPI Snapshot (Finance & Operations clusters)
+ * 4. Module Quick Links
  */
 export const WIDGET_REGISTRY: WidgetDefinition[] = [
     {
@@ -77,8 +77,9 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     },
     {
         id: "ai_digest",
-        title: "Intelligence Digest",
-        description: "Daily cross-module AI summary of key signals.",
+        title: "Business Pulse",
+        description:
+            "Daily cross-module summary of key signals across the business.",
         component: DigestCard,
         defaultCols: 4,
         minCols: 2,
@@ -117,10 +118,10 @@ export function getWidget(id: string): WidgetDefinition | undefined {
 /** Default ERP dashboard layout in priority hierarchy order. */
 const DEFAULT_PRIMARY_WIDGET_IDS = [
     "attention_strip",
+    "ai_digest",
     "cross_module_kpis",
     "reports_kpis",
     "module_quick_links",
-    "ai_digest",
 ];
 
 /** Return the default layout (prioritized default widgets, order and sizes). */
