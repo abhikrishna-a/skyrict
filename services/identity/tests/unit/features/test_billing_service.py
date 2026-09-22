@@ -957,11 +957,11 @@ class TestSignupCheckoutSession:
         }
         assert session["automatic_tax"] == {"enabled": True}
         assert session["success_url"] == (
-            "https://signup.acme.test/register/review"
+            "https://signup.acme.test/signup/review"
             "?plan=professional&interval=month&currency=usd&checkout=success"
         )
         assert session["cancel_url"] == (
-            "https://signup.acme.test/register/billing"
+            "https://signup.acme.test/signup/billing"
             "?plan=professional&interval=month&currency=usd&checkout=cancelled"
         )
         assert [e["action"] for e in audit.entries] == ["billing.checkout.created"]
@@ -990,7 +990,7 @@ class TestSignupCheckoutSession:
         session = stripe.created_checkout_sessions[0]
         assert session["price_id"] == "price_biz_year"
         assert session["success_url"] == (
-            "https://signup.acme.test/register/review"
+            "https://signup.acme.test/signup/review"
             "?plan=business&interval=year&currency=usd&checkout=success"
         )
 
@@ -1017,7 +1017,7 @@ class TestSignupCheckoutSession:
         assert session["price_id"] == "price_pro_month_inr"
         assert session["metadata"]["currency"] == "inr"
         assert session["success_url"] == (
-            "https://signup.acme.test/register/review"
+            "https://signup.acme.test/signup/review"
             "?plan=professional&interval=month&currency=inr&checkout=success"
         )
 

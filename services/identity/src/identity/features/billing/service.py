@@ -258,8 +258,8 @@ class BillingService:
             plan_id=plan_id,
             interval=interval,
             currency=currency,
-            success_url=f"{signup_url}/register/review?{query}&checkout=success",
-            cancel_url=f"{signup_url}/register/billing?{query}&checkout=cancelled",
+            success_url=f"{signup_url}/signup/review?{query}&checkout=success",
+            cancel_url=f"{signup_url}/signup/billing?{query}&checkout=cancelled",
         )
 
     async def _create_checkout_session(
