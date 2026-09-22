@@ -11,6 +11,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
+import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/dashboard/shared/stat-card";
 import { StatCardSkeleton } from "@/components/ui/page-skeletons";
@@ -27,6 +28,7 @@ import {
 type KpiSlot =
   | { status: "loading" }
   | { status: "error"; message: string }
+  | { status: "hidden" }
   | { status: "ready"; value: string; hint: string };
 
 const KPI_ICONS: Record<KpiId, LucideIcon> = {
@@ -52,6 +54,13 @@ export function ReportKpis() {
       const { value, hint } = deriveKpiValue(def.id, result);
       setSlots((current) => ({ ...current, [def.id]: { status: "ready", value, hint } }));
     } catch (error) {
+      if (error instanceof ApiError && error.status === 403) {
+        // A permission-gated metric is not a failure to surface. The widget
+        // itself is hidden without erp.reports.read, and this covers finer
+        // per-report keys on an otherwise allowed dashboard.
+        setSlots((current) => ({ ...current, [def.id]: { status: "hidden" } }));
+        return;
+      }
       setSlots((current) => ({
         ...current,
         [def.id]: {
@@ -63,15 +72,26 @@ export function ReportKpis() {
     }
   }, []);
 
+  const { status: accessStatus, permissions } = useModuleAccess();
+  const permitted =
+    accessStatus === "ready" &&
+    hasPermission(permissions, "erp.reports.read");
+
   const loadAll = useCallback(() => {
     for (const def of DASHBOARD_KPI_DEFS) void loadOne(def);
   }, [loadOne]);
 
   useEffect(() => {
+    if (accessStatus !== "ready") return;
+    if (!permitted) return;
     loadAll();
-  }, [loadAll]);
+  }, [accessStatus, permitted, loadAll]);
 
   const errorCount = Object.values(slots).filter((slot) => slot.status === "error").length;
+
+  // On an allowed dashboard the widget still must not render for users who
+  // cannot run reports; hide it dynamically once access resolves.
+  if (accessStatus === "ready" && !permitted) return null;
 
   return (
     <section aria-label="Report KPIs" className="space-y-3">
@@ -144,6 +164,7 @@ export function ReportKpis() {
               </div>
             );
           }
+          if (slot.status === "hidden") return null;
           return <StatCardSkeleton key={def.id} />;
         })}
       </div>

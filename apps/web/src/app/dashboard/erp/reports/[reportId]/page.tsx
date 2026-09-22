@@ -1,3 +1,4 @@
+import { RequirePermission } from "@/components/dashboard/shared/require-permission";
 import { ReportsDetail } from "@/features/reports/report-detail";
 
 interface ReportDetailPageProps {
@@ -17,5 +18,9 @@ export default async function ReportDetailPage({
     if (typeof value === "string") initialParams[key] = value;
   }
 
-  return <ReportsDetail slug={reportId} initialParams={initialParams} />;
+  return (
+    <RequirePermission permission="erp.reports.read">
+      <ReportsDetail slug={reportId} initialParams={initialParams} />
+    </RequirePermission>
+  );
 }

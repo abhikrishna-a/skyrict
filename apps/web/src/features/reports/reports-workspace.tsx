@@ -182,23 +182,18 @@ export function ReportsWorkspace() {
     return groupReports(filtered);
   }, [state, query]);
 
-  if (state.status === "loading") {
-    return (
-      <div className="space-y-6">
-        <ListSkeleton rows={4} />
-      </div>
-    );
-  }
-
-  if (state.status === "error") {
-    return <ErrorState message={state.message} onRetry={() => void load()} />;
-  }
-
   const totalMatches = groups.reduce((sum, [, reports]) => sum + reports.length, 0);
 
   return (
     <RequirePermission permission="erp.reports.read">
-      <div className="space-y-6">
+      {state.status === "loading" ? (
+        <div className="space-y-6">
+          <ListSkeleton rows={4} />
+        </div>
+      ) : state.status === "error" ? (
+        <ErrorState message={state.message} onRetry={() => void load()} />
+      ) : (
+        <div className="space-y-6">
         {state.mockFallback ? (
           <div
             role="status"
@@ -542,6 +537,7 @@ export function ReportsWorkspace() {
           </div>
         )}
       </div>
+      )}
     </RequirePermission>
   );
 }

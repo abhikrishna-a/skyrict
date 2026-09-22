@@ -5,6 +5,7 @@ import { Blocks, Settings } from "lucide-react";
 
 import { CustomizeMode, type CustomizeLayoutItem } from "./customize-mode";
 import { WidgetGrid, type LayoutItem } from "./widget-grid";
+import { useModuleAccess } from "@/lib/access/modules";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/dashboard/shared/page-header";
 import {
@@ -12,7 +13,10 @@ import {
     saveLayout,
     resetLayout,
 } from "@/lib/dashboard/layout-api";
-import { getDefaultLayout } from "@/lib/dashboard/widget-registry";
+import {
+    filterWidgetsByPermissions,
+    getDefaultLayout,
+} from "@/lib/dashboard/widget-registry";
 import { trackWidgetEvent } from "@/lib/dashboard/widget-events";
 
 /**
@@ -28,6 +32,16 @@ export function ErpDashboardClient() {
     const [loaded, setLoaded] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [errorNotice, setErrorNotice] = useState<string | null>(null);
+
+    const { status: accessStatus, permissions } = useModuleAccess();
+
+    // Hide permission-scoped widgets (e.g. Report KPIs) from users who lack
+    // the required key so a hidden surface never renders denied data on an
+    // otherwise allowed dashboard.
+    const allowedLayout =
+        accessStatus === "ready"
+            ? filterWidgetsByPermissions(layout, permissions)
+            : layout;
 
     // Load layout on mount
     useEffect(() => {
@@ -132,7 +146,7 @@ export function ErpDashboardClient() {
                 </Button>
             </div>
 
-            <WidgetGrid layout={layout} onWidgetShow={handleWidgetShow} />
+            <WidgetGrid layout={allowedLayout} onWidgetShow={handleWidgetShow} />
 
             {customizing && (
                 <CustomizeMode

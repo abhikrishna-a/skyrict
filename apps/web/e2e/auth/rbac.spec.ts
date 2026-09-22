@@ -131,4 +131,15 @@ test("finance viewer can reach finance surfaces but is denied payroll access", a
 
     const afterDocuments = (await page.locator("body").textContent()) ?? "";
     expect(afterDocuments.toLowerCase()).not.toContain("all documents");
+
+    /* ── positive: reports stay reachable for the finance viewer ──────── */
+    // finance_viewer holds erp.reports.read (the seed grants the standard
+    // read set plus erp.reports.read), so the reports page gate must not
+    // over-block: the Reports heading renders instead of a denial or a
+    // permission error.
+    await page.goto(`${workspaceUrl(SLUG)}/dashboard/erp/reports`);
+
+    await expect(
+        page.getByRole("heading", { name: "Reports", exact: true }),
+    ).toBeVisible({ timeout: 15_000 });
 });

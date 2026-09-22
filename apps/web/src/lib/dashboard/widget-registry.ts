@@ -156,6 +156,11 @@ export function filterWidgetsByPermissions(
         const widget = getWidget(item.id);
         if (!widget) return false;
         if (!widget.permissions || widget.permissions.length === 0) return true;
-        return widget.permissions.some((p) => grantedPermissions.includes(p));
+        // Owners hold the "*" wildcard and must keep every permission-scoped
+        // widget; otherwise at least one granted key is required.
+        return (
+            grantedPermissions.includes("*") ||
+            widget.permissions.some((p) => grantedPermissions.includes(p))
+        );
     });
 }

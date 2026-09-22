@@ -51,7 +51,7 @@ const LazyReportChart = dynamic(
 
 type LoadState =
   | { status: "loading" }
-  | { status: "error"; message: string }
+  | { status: "error"; message: string; permissionDenied: boolean }
   | { status: "ready"; report: ReportDefinition };
 
 type RunState =
@@ -103,6 +103,7 @@ export function ReportsDetail({
         status: "error",
         message:
           error instanceof ApiError ? error.message : "Could not load this report.",
+        permissionDenied: error instanceof ApiError && error.status === 403,
       });
     }
   }, [loadSnapshots, slug]);
@@ -204,6 +205,8 @@ export function ReportsDetail({
   }
 
   if (state.status === "error") {
+    // A permission-denied fetch must stay hidden, never an error card.
+    if (state.permissionDenied) return null;
     return <ErrorState message={state.message} onRetry={() => void load()} />;
   }
 
