@@ -1,0 +1,15 @@
+{
+    "name": "gold-star-schema",
+    "module_group": "analytics",
+    "description": "Silver to Gold star schema: 4 dims + 3 facts",
+    "source": "local-silver",
+    "tables": [
+        {"name": "silver_crm_customers"},
+        {"name": "silver_crm_leads"},
+        {"name": "silver_crm_opportunities"},
+        {"name": "silver_products"},
+        {"name": "silver_invoices"},
+        {"name": "silver_payments"}
+    ],
+    "schedule_cron": "30 */4 * * *"
+}
