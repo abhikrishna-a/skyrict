@@ -53,14 +53,16 @@ from ai_agent.features.supervisor.delegates import (
 )
 from ai_agent.features.supervisor.permissions import (
     AGENT_REQUIRED_PERMISSIONS,
+    _accessible_module_guide,
+    abstention_message,
+    greeting_message,
     permission_denied_message,
+    supervisor_access_tail,
 )
 from ai_agent.features.supervisor.prompt_builder import StablePromptBuilder
 from ai_agent.features.supervisor.prompts import (
-    ABSTENTION,
     CLASSIFY_SYSTEM_PROMPT,
     DEGRADED,
-    GREETING,
     RATE_LIMITED,
     SUPERVISOR_SYSTEM_PROMPT,
     not_provisioned_message,
@@ -523,8 +525,21 @@ class SupervisorService:
                 agent="supervisor", display_name=AGENT_DISPLAY_NAMES["supervisor"]
             )
             if _is_greeting(query):
-                # Genuine greeting - a short, friendly redirect.
-                for event in _yield_text(agent="supervisor", text=GREETING):
+                # Genuine greeting - grant-scoped redirect: the greeting names
+                # only the modules the caller can actually access.
+                for event in _yield_text(
+                    agent="supervisor",
+                    text=greeting_message(self._granted_permissions),
+                ):
+                    yield event
+            elif _is_permission_question(query):
+                # Deterministic, grant-grounded answer to "what can I ask?" -
+                # no LLM, so the universal front-desk persona can never claim
+                # access the caller does not have (the reported hallucination).
+                for event in _yield_text(
+                    agent="supervisor",
+                    text=_accessible_module_guide(self._granted_permissions),
+                ):
                     yield event
             else:
                 # A real question that did not route to a module: answer it as
@@ -666,17 +681,24 @@ class SupervisorService:
                 return
         self._response_cache_hit = False
         if not self._llm_router.has_providers:
-            for event in _yield_text(agent="supervisor", text=ABSTENTION):
+            for event in _yield_text(
+                agent="supervisor", text=abstention_message(self._granted_permissions)
+            ):
                 yield event
             return
         try:
-            system_tail = ""
+            # The caller-scope line ALWAYS leads the general answer's prompt so
+            # the universal persona is grounded in the caller's real grants -
+            # it can never answer "what can I ask?" with modules the caller
+            # cannot read.
+            system_tail_parts = [supervisor_access_tail(self._granted_permissions)]
             if conversation_history:
-                system_tail = (
+                system_tail_parts.append(
                     f"--- Conversation history ---\n"
                     f"{conversation_history}\n"
                     f"--- End of conversation history ---"
                 )
+            system_tail = "\n\n".join(system_tail_parts)
             completion = await self._llm_router.complete(
                 _SUPERVISOR_ANSWER_BUILDER.build(
                     user_prompt=query.strip(),
@@ -706,7 +728,10 @@ class SupervisorService:
                 text,
                 ttl_seconds=self._response_cache_ttl_seconds,
             )
-        for event in _yield_text(agent="supervisor", text=text or ABSTENTION):
+        for event in _yield_text(
+            agent="supervisor",
+            text=text or abstention_message(self._granted_permissions),
+        ):
             yield event
 
     async def _load_conversation_history(
@@ -934,6 +959,30 @@ def _is_greeting(query: str) -> bool:
         if all(word in _GREETING_FILLERS for word in rest):
             return True
     return False
+
+
+# Substrings that mark a question about the caller's own access rather than a
+# module-data request. Runs ONLY on the abstain path (nothing routed to a leaf),
+# so a broad marker like "permission" cannot hijack a module question.
+_PERMISSION_QUESTION_MARKERS = (
+    "which module",
+    "what module",
+    "my permission",
+    "my access",
+    "permission",
+    "restriction",
+    "restricted",
+    "allowed to ask",
+    "am i allowed",
+    "can i ask",
+    "modules can i",
+)
+
+
+def _is_permission_question(query: str) -> bool:
+    """True when the user asks what they can ask about, not for module data."""
+    lowered = " ".join(query.strip().split()).casefold()
+    return any(marker in lowered for marker in _PERMISSION_QUESTION_MARKERS)
 
 
 def _yield_text(*, agent: str, text: str) -> Iterator[TokenEvent]:

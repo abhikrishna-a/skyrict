@@ -23,6 +23,7 @@ from ai_agent.features.rag.retrieval.service import RetrievalItem, RetrievalResu
 from ai_agent.features.supervisor.permissions import (
     accessible_agents,
     permission_denied_message,
+    supervisor_access_tail,
 )
 from ai_agent.features.supervisor.schemas import (
     AgentStartEvent,
@@ -77,9 +78,11 @@ class FakeLlmRouter:
         self._stream_tokens = stream_tokens or ["hello ", "world "]
         self.complete_calls = 0
         self.stream_calls = 0
+        self.last_request: LlmRequest | None = None
 
     async def complete(self, request: LlmRequest) -> LlmCompletion:
         self.complete_calls += 1
+        self.last_request = request
         if self._completion_pool is not None:
             text = self._completion_pool.pop(0) if self._completion_pool else self._completion_text
             if isinstance(text, Exception):
@@ -726,6 +729,81 @@ def test_permission_denied_message_two_modules_reads_naturally() -> None:
     )
     assert "You can ask me about Inventory Monitor and CRM Assistant" in message
     assert "for example, which stock is running low" in message
+
+
+async def test_general_permission_question_scopes_to_caller_grants() -> None:
+    """The reported hallucination: asking "what can I ask?" must answer from
+    the caller's real grants, never from the universal front-desk persona."""
+    router = FakeLlmRouter(has_providers=True)
+    service = make_service(
+        router=router,
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_CRM_READ}),
+    )
+
+    events = await collect(
+        service, query="which module i can ask? what is my permission and restrictions?"
+    )
+
+    text = tokens_text(events, "supervisor")
+    assert "Your access is scoped to CRM Assistant" in text
+    assert "top customers, open deals, or your pipeline" in text
+    # The CRM-only caller is never told about other modules...
+    assert "inventory" not in text.casefold()
+    assert "finance" not in text.casefold()
+    assert "HR" not in text
+    # ...and the deterministic path never called the general-answer LLM:
+    # the two calls are the classifier's retry pair on the keyword miss only.
+    assert router.complete_calls == 2
+
+
+async def test_greeting_scopes_to_caller_grants() -> None:
+    """A greeting names only the modules the caller can access."""
+    service = make_service(
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_CRM_READ}),
+    )
+
+    events = await collect(service, query="hi")
+
+    text = tokens_text(events, "supervisor")
+    assert "I can help with CRM Assistant" in text
+    assert "inventory" not in text.casefold()
+    assert "finance" not in text.casefold()
+
+
+async def test_greeting_with_no_grants_points_to_admin() -> None:
+    service = make_service(
+        granted_permissions=frozenset({PERM_AI_INVOKE}),
+    )
+
+    events = await collect(service, query="hi")
+
+    text = tokens_text(events, "supervisor")
+    assert "doesn't have access to any assistant modules yet" in text
+    assert "contact your workspace admin" in text
+    assert "CRM Assistant" not in text
+
+
+async def test_supervisor_answer_injects_caller_scope_tail() -> None:
+    """Every general answer's system prompt carries the caller's real scope,
+    so the LLM cannot claim access the caller does not have."""
+    router = FakeLlmRouter(has_providers=True, completion_text="Some general answer.")
+    service = make_service(
+        router=router,
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_CRM_READ}),
+    )
+
+    events = await collect(service, query="what are your opening hours?")
+
+    assert "Some general answer." in tokens_text(events, "supervisor")
+    assert router.last_request is not None
+    assert "The caller's current module access: CRM Assistant" in router.last_request.system_prompt
+    assert "Only help with modules the caller can access" in router.last_request.system_prompt
+
+
+def test_supervisor_access_tail_with_no_modules_fails_closed() -> None:
+    message = supervisor_access_tail(frozenset({PERM_AI_INVOKE}))
+    assert "has no assistant module access" in message
+    assert "never describe or offer module data" in message
 
 
 async def test_stream_multi_agent_sequential_segments() -> None:

@@ -47,16 +47,6 @@ Formatting: write in short, flowing paragraphs, the way a helpful person would t
 """.strip()
 
 
-ABSTENTION = """
-I can help with inventory, HR, CRM, and finance.
-""".strip()
-
-
-GREETING = """
-Hey! I'm the Skyrict assistant. I can help with inventory, HR, CRM, and finance - what would you like to know?
-""".strip()
-
-
 DEGRADED = """
 That agent is temporarily unavailable. Please try again shortly.
 """.strip()
