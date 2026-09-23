@@ -2,10 +2,13 @@
 
 Identity owns tenancy + roles; the core service mirrors the subset it needs -
 ``core_roles`` + ``core_user_roles`` - so ``require_permission`` can resolve
-ERP grants at request time. This module applies the ``identity.tenant.provisioned``
-and ``identity.rbac.role_granted`` payloads (see ``skyrict_events.schemas``),
-idempotently: a role is upserted by ``(tenant_id, id)`` with a name-match
-fallback, and a grant by ``(tenant_id, user_id, role_id, scope_id)``.
+ERP grants at request time. This module applies the ``identity.tenant.provisioned``,
+``identity.rbac.role_granted``, and ``identity.rbac.role_updated`` payloads
+(see ``skyrict_events.schemas``), idempotently: a role is upserted by
+``(tenant_id, id)`` with a name-match fallback, and a grant by
+``(tenant_id, user_id, role_id, scope_id)``. Role permission arrays are
+REPLACED on conflict (never merged), so permission removals stop being
+enforced on the next event.
 
 Phase 1: Kafka is not wired, so there is no broker consumer loop. The handler
 is invoked directly - from the ``core provision-rbac`` CLI, from tests, and

@@ -15,8 +15,10 @@ import structlog
 from core.events.consumers.rbac import RbacProvisionResult, provision_tenant_rbac
 from skyrict_events.schemas import (
     RBAC_ROLE_GRANTED_EVENT_TYPE,
+    RBAC_ROLE_UPDATED_EVENT_TYPE,
     TENANT_PROVISIONED_EVENT_TYPE,
     RbacRoleGranted,
+    RbacRoleUpdated,
     TenantProvisioned,
 )
 
@@ -42,6 +44,12 @@ async def handle_event(payload: dict[str, Any]) -> RbacProvisionResult | None:
         return await provision_tenant_rbac(
             tenant_id=granted.tenant_id,
             role_grants=[granted.grant.model_dump()],
+        )
+    if event_type == RBAC_ROLE_UPDATED_EVENT_TYPE:
+        updated = RbacRoleUpdated.model_validate(payload)
+        return await provision_tenant_rbac(
+            tenant_id=updated.tenant_id,
+            role_grants=[updated.role.model_dump()],
         )
     logger.warning("events.unhandled_type", event_type=event_type)
     return None
