@@ -5,6 +5,7 @@ from skyrict_events.schemas import (
     AuthLoginSuccess,
     MFASuccess,
     RbacRoleGranted,
+    RbacRoleUpdated,
     RoleGrant,
     SessionCreated,
     TenantCreated,
@@ -78,6 +79,33 @@ class TestRbacRoleGranted:
         )
         assert event.event_type == "identity.rbac.role_granted"
         assert event.grant.scope_id == "t-1"
+
+
+class TestRbacRoleUpdated:
+    def test_fields(self):
+        event = RbacRoleUpdated(
+            tenant_id="t-1",
+            role=RoleGrant(
+                role_id="r-1",
+                role_name="ops_custom",
+                permissions=["erp.finance.read", "erp.ai.invoke"],
+                is_system_role=False,
+            ),
+        )
+        assert event.event_type == "identity.rbac.role_updated"
+        assert event.role.role_name == "ops_custom"
+        assert event.role.user_id is None
+        assert event.role.permissions == ["erp.finance.read", "erp.ai.invoke"]
+
+    def test_round_trip_json(self):
+        event = RbacRoleUpdated(
+            tenant_id="t-1",
+            role=RoleGrant(role_id="r-1", role_name="ops_custom", permissions=["*"]),
+        )
+        restored = RbacRoleUpdated.model_validate_json(event.to_json())
+        assert restored.event_type == "identity.rbac.role_updated"
+        assert restored.role.role_id == "r-1"
+        assert restored.role.permissions == ["*"]
 
 
 class TestSessionCreated:

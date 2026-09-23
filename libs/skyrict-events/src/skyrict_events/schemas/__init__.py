@@ -16,6 +16,7 @@ from skyrict_events.base import BaseEvent
 
 TENANT_PROVISIONED_EVENT_TYPE = "identity.tenant.provisioned"
 RBAC_ROLE_GRANTED_EVENT_TYPE = "identity.rbac.role_granted"
+RBAC_ROLE_UPDATED_EVENT_TYPE = "identity.rbac.role_updated"
 PLAN_CHANGED_EVENT_TYPE = "identity.billing.plan_changed"
 
 
@@ -103,6 +104,18 @@ class RbacRoleGranted(BaseEvent):
     grant: RoleGrant
 
 
+class RbacRoleUpdated(BaseEvent):
+    """Published when a role's definition (name and/or permissions) changes.
+
+    Carries no user grant: this is a role-catalog update (create or edit), so a
+    consumer refreshes its own role projection - replacing the permission array,
+    never merging - and leaves existing user->role grants untouched.
+    """
+
+    event_type: str = RBAC_ROLE_UPDATED_EVENT_TYPE
+    role: RoleGrant
+
+
 class PlanChanged(BaseEvent):
     """Published when a tenant's subscription plan tier changes."""
 
@@ -152,6 +165,7 @@ class MFAFailed(BaseEvent):
 __all__ = [
     "PLAN_CHANGED_EVENT_TYPE",
     "RBAC_ROLE_GRANTED_EVENT_TYPE",
+    "RBAC_ROLE_UPDATED_EVENT_TYPE",
     "TENANT_PROVISIONED_EVENT_TYPE",
     "AuthLoginFailed",
     "AuthLoginSuccess",
@@ -159,6 +173,7 @@ __all__ = [
     "MFASuccess",
     "PlanChanged",
     "RbacRoleGranted",
+    "RbacRoleUpdated",
     "RoleGrant",
     "SessionCreated",
     "SessionRevoked",
