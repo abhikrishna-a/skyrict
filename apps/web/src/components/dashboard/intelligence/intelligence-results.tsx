@@ -1,4 +1,5 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -15,7 +16,6 @@ import {
     Newspaper,
     Play,
     Quote,
-    Sparkles,
     TrendingUp,
     type LucideIcon,
 } from "lucide-react";
@@ -28,7 +28,7 @@ import { cn } from "@/lib/utils";
 const SECTION_ICONS = {
     competitors: TrendingUp,
     "winning-products": BadgeCheck,
-    niches: Sparkles,
+    niches: AiGlyph,
     trends: ChartLine,
 } as const;
 
@@ -243,7 +243,7 @@ export function IntelligenceResults() {
                 <div className="relative">
                     <div className="flex flex-wrap items-center gap-2">
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
-                            <Sparkles aria-hidden="true" className="size-3.5" />
+                            <AiGlyph aria-hidden="true" className="size-3.5" />
                             AI Research
                         </span>
                         <span className="text-xs text-muted-foreground">
@@ -288,7 +288,7 @@ export function IntelligenceResults() {
             </section>
 
             {response.sections.map((section, index) => {
-                const Icon = SECTION_ICONS[section.id] ?? Sparkles;
+                const Icon = SECTION_ICONS[section.id] ?? AiGlyph;
                 return (
                     <section key={section.id} className="space-y-4">
                         <div className="flex items-center justify-between gap-4">

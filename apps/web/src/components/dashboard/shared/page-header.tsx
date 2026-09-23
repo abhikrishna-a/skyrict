@@ -1,9 +1,10 @@
 import type { LucideIcon } from "lucide-react";
+import type { ComponentType } from "react";
 
 interface PageHeaderProps {
     title: string;
     description: string;
-    icon?: LucideIcon;
+    icon?: LucideIcon | ComponentType<{ className?: string }>;
 }
 
 export function PageHeader({

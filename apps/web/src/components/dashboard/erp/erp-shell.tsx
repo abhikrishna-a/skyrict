@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { AppSidebar } from "@/components/dashboard/workspace/app-sidebar";
 import { Topbar } from "@/components/dashboard/workspace/topbar";
@@ -34,37 +34,44 @@ export function ErpShell({ children }: { children: React.ReactNode }) {
         });
     }, []);
 
-    const navGroups =
-        status === "ready"
-            ? filterNavGroupsByPermissions(erpNavGroups, permissions)
-            : erpNavGroups;
+    // Fail closed: until the effective permissions are known (loading OR error)
+    // the ERP nav renders NOTHING. Falling back to the unfiltered tree flashed
+    // every module (CRM, Orders, Inventory, HR, Payroll, ...) at a user holding
+    // none of their keys, which reads as "you have full access" for a tick.
+    const navGroups = useMemo(
+        () =>
+            status === "ready"
+                ? filterNavGroupsByPermissions(erpNavGroups, permissions)
+                : [],
+        [status, permissions],
+    );
 
     return (
-        <ModuleAccessBoundary module="erp">
-            <div
-                className="flex h-dvh overflow-hidden bg-background theme-erp"
-                data-theme-scope
-            >
-                <AppSidebar
-                    collapsed={collapsed}
-                    mobileOpen={mobileOpen}
-                    onToggleCollapsed={toggleCollapsed}
-                    onCloseMobile={() => setMobileOpen(false)}
-                    navGroups={navGroups}
-                    accountItems={[]}
-                    brandHref="/erp"
-                    logoTone="erp"
-                    showBackToOverview
-                />
-                <div className="flex min-w-0 flex-1 flex-col">
-                    <Topbar onOpenMenu={() => setMobileOpen(true)} />
-                    <main className="flex-1 overflow-y-auto">
+        <div
+            className="flex h-dvh overflow-hidden bg-background theme-erp"
+            data-theme-scope
+        >
+            <AppSidebar
+                collapsed={collapsed}
+                mobileOpen={mobileOpen}
+                onToggleCollapsed={toggleCollapsed}
+                onCloseMobile={() => setMobileOpen(false)}
+                navGroups={navGroups}
+                accountItems={[]}
+                brandHref="/erp"
+                logoTone="erp"
+                showBackToOverview
+            />
+            <div className="flex min-w-0 flex-1 flex-col">
+                <Topbar onOpenMenu={() => setMobileOpen(true)} />
+                <main className="flex-1 overflow-y-auto">
+                    <ModuleAccessBoundary module="erp">
                         <div className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-6 lg:py-8">
                             {children}
                         </div>
-                    </main>
-                </div>
+                    </ModuleAccessBoundary>
+                </main>
             </div>
-        </ModuleAccessBoundary>
+        </div>
     );
 }

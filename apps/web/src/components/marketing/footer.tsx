@@ -13,18 +13,6 @@ function Footer() {
                         <p className="text-sm leading-relaxed text-muted-foreground">
                             {site.description}
                         </p>
-                        <div className="flex flex-wrap gap-1.5">
-                            {["Next.js", "React", "TypeScript", "Tailwind"].map(
-                                (tech) => (
-                                    <span
-                                        key={tech}
-                                        className="rounded-full border border-border bg-muted/50 px-2 py-0.5 text-xs text-muted-foreground"
-                                    >
-                                        {tech}
-                                    </span>
-                                ),
-                            )}
-                        </div>
                     </div>
                     <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
                         {footerColumns.map((column) => (
@@ -66,7 +54,7 @@ function Footer() {
                         rights reserved.
                     </p>
                     <p className="font-mono text-xs text-muted-foreground/70">
-                        {`internal truth × external truth \n agents`}
+                        {site.tagline}
                     </p>
                 </div>
             </div>

@@ -1,8 +1,9 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
-import { CalendarDays, Send, Sparkles, X } from "lucide-react";
+import { CalendarDays, Send, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { DatePicker } from "@/components/ui/date-picker";
@@ -306,7 +307,7 @@ export function LeavePortal() {
                                 className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-4 py-3"
                             >
                                 <div className="flex min-w-0 items-start gap-2">
-                                    <Sparkles
+                                    <AiGlyph
                                         aria-hidden="true"
                                         className="mt-0.5 size-4 shrink-0 text-primary"
                                     />

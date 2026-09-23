@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from identity.core.email_templates import (
     SecurityAlert,
+    render_invitation_html,
+    render_invitation_text,
     render_security_alert_html,
     render_security_alert_text,
 )
@@ -129,3 +131,77 @@ def test_plaintext_without_urls() -> None:
     text = render_security_alert_text(_alert(review_url=None, secure_url=None))
     assert "https://app.skyrict.io" not in text
     assert "change your password" in text
+
+
+# --------------------------------------------------------------------------- #
+# Invitation templates
+# --------------------------------------------------------------------------- #
+
+
+def test_invitation_html_link_branch() -> None:
+    html = render_invitation_html(
+        inviter_name="Aisha",
+        organization_name="Acme Corp",
+        token="tok_abc123",
+        base_url="https://acme.signin.skyrict.com/invite",
+    )
+    assert "<!DOCTYPE html>" in html
+    assert "Invitation" in html
+    assert "Acme Corp" in html
+    assert "Aisha" in html
+    assert "Accept invitation" in html
+    assert 'href="https://acme.signin.skyrict.com/invite?token=tok_abc123"' in html
+
+
+def test_invitation_html_token_branch() -> None:
+    html = render_invitation_html(
+        inviter_name="Bob",
+        organization_name="Retro Inc",
+        token="retro_token_xyz",
+    )
+    assert "retro_token_xyz" in html
+    assert "Accept invitation" not in html
+    assert "https://" not in html
+
+
+def test_invitation_html_escapes_xss() -> None:
+    html = render_invitation_html(
+        inviter_name='A"><script>alert(1)</script>',
+        organization_name="B</span><img src=x>",
+        token="safe_token",
+    )
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
+    assert "<img" not in html  # escaped, no bare tag
+    assert "&lt;img src=x&gt;" in html
+
+
+def test_invitation_plaintext_link_branch() -> None:
+    text = render_invitation_text(
+        inviter_name="Aisha",
+        organization_name="Acme Corp",
+        token="tok_abc123",
+        base_url="https://acme.signin.skyrict.com/invite",
+    )
+    assert "Accept the invitation: https://acme.signin.skyrict.com/invite?token=tok_abc123" in text
+    assert "Acme Corp" in text
+    assert "Aisha" in text
+
+
+def test_invitation_plaintext_token_branch() -> None:
+    text = render_invitation_text(
+        inviter_name="Bob",
+        organization_name="Retro Inc",
+        token="retro_token_xyz",
+    )
+    assert "Your invitation token is: retro_token_xyz" in text
+    assert "Accept the invitation:" not in text
+
+
+def test_invitation_plaintext_single_use_wording() -> None:
+    text = render_invitation_text(
+        inviter_name="X",
+        organization_name="Y",
+        token="t",
+    )
+    assert "single-use" in text

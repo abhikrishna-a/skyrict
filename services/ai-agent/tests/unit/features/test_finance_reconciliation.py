@@ -19,6 +19,7 @@ import pytest
 from ai_agent.features.finance.gateway import HttpFinanceGateway
 from ai_agent.features.finance_intents.schemas import INTENT_META
 from ai_agent.features.supervisor.delegates import FinanceDelegator
+from ai_agent.graphs.security import PERM_AI_INVOKE, PERM_FINANCE_READ
 
 if TYPE_CHECKING:
     from ai_agent.features.supervisor.schemas import Citation
@@ -168,7 +169,11 @@ def _make_delegator() -> FinanceDelegator:
     async def factory() -> HttpFinanceGateway:
         return gateway
 
-    return FinanceDelegator(llm_router=NoLlmRouter(), finance_gateway_factory=factory)
+    return FinanceDelegator(
+        llm_router=NoLlmRouter(),
+        finance_gateway_factory=factory,
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_FINANCE_READ}),
+    )
 
 
 async def _ask(delegator: FinanceDelegator, question: str) -> tuple[str, list[Citation]]:

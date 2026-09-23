@@ -1,4 +1,5 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { useEffect, useRef } from "react";
 import Link from "next/link";
@@ -10,24 +11,21 @@ import {
     Compass,
     House,
     Keyboard,
-    LogOut,
     MessageSquareText,
     ScanSearch,
-    Sparkles,
     TrendingUp,
     X,
     type LucideIcon,
 } from "lucide-react";
 
-import type { AuthUser } from "@/lib/api/auth-api";
-import { useSession } from "@/lib/auth/session";
 import { normalizeDashboardPath } from "@/lib/dashboard-path";
 import { cn } from "@/lib/utils";
+import { UserMenu } from "@/components/dashboard/workspace/user-menu";
 
 interface MenuItem {
     label: string;
     href?: string;
-    icon: LucideIcon;
+    icon: LucideIcon | typeof AiGlyph;
     soon?: boolean;
     exact?: boolean;
 }
@@ -79,7 +77,7 @@ const MENU_GROUPS: { label: string; items: MenuItem[] }[] = [
         items: [
             { label: "Documentation", icon: BookOpen, soon: true },
             { label: "Keyboard shortcuts", icon: Keyboard, soon: true },
-            { label: "What's new", icon: Sparkles, soon: true },
+            { label: "What's new", icon: AiGlyph, soon: true },
         ],
     },
 ];
@@ -96,20 +94,6 @@ function isActive(pathname: string, item: MenuItem): boolean {
     return normalized === href || normalized.startsWith(`${href}/`);
 }
 
-function initialsFor(name: string, email: string): string {
-    const parts = name.trim().split(/\s+/);
-    if (parts.length > 1) {
-        return `${parts[0][0] ?? ""}${parts[parts.length - 1][0] ?? ""}`.toUpperCase();
-    }
-    if (parts[0]) return parts[0].slice(0, 2).toUpperCase();
-    return email.slice(0, 2).toUpperCase() || "SK";
-}
-
-/** Same-origin avatar URL served by /api/auth/avatar/{user_id}/{filename}. */
-function avatarSrc(user: AuthUser | null): string | null {
-    return user?.avatarUrl ? `/api/auth/avatar/${user.avatarUrl}` : null;
-}
-
 export function IntelligenceMenu({
     open,
     onClose,
@@ -119,7 +103,6 @@ export function IntelligenceMenu({
 }) {
     const pathname = usePathname();
     const lastPathname = useRef(pathname);
-    const { user, logout } = useSession();
 
     useEffect(() => {
         // Close the drawer whenever the route changes (links also close it on
@@ -231,40 +214,8 @@ export function IntelligenceMenu({
                     ))}
                 </nav>
 
-                <footer className="flex items-center gap-3 border-t border-border px-5 py-4">
-                    <div className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/15 text-xs font-semibold text-primary-foreground">
-                        {avatarSrc(user) ? (
-                            // eslint-disable-next-line @next/next/no-img-element
-                            <img
-                                src={avatarSrc(user) ?? ""}
-                                alt={
-                                    user?.fullName
-                                        ? `${user.fullName}'s avatar`
-                                        : "Profile avatar"
-                                }
-                                className="size-full object-cover"
-                            />
-                        ) : (
-                            initialsFor(user?.fullName ?? "", user?.email ?? "")
-                        )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-foreground">
-                            {user?.fullName || user?.email || "Account"}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">
-                            {user?.email}
-                        </p>
-                    </div>
-                    <button
-                        type="button"
-                        onClick={() => void logout()}
-                        title="Sign out"
-                        aria-label="Sign out"
-                        className="flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    >
-                        <LogOut aria-hidden="true" className="size-4" />
-                    </button>
+                <footer className="border-t border-border p-3">
+                    <UserMenu />
                 </footer>
             </aside>
         </>

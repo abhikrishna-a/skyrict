@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { getMyRoles } from "@/lib/api/identity-api";
+import { getTenantSlug } from "@/lib/auth/session-store";
 
 export type ModuleKey = "erp" | "agents" | "intelligence";
 
@@ -25,6 +26,29 @@ const WILDCARD = "*";
 const AGENTS_READ = "agents:read";
 const INTELLIGENCE_READ = "intelligence:read";
 
+/**
+ * `erp.*` namespaces that gate a surface OUTSIDE the ERP operations world.
+ *
+ * The ERP world gate is namespace-based ("holds any `erp.*` key"), which is
+ * exactly why the employee self-service portal has to be excluded:
+ * `erp.leave.self` is its own world (`/leave`) and deliberately carries zero
+ * dashboard keys (identity `core/constants.py`). Counting it as an ERP key
+ * would open the whole operations app - nav, dashboard, approvals - to a
+ * leave-only user and answer every load with a 403 instead of their portal.
+ */
+const NON_WORLD_ERP_PREFIXES = ["erp.leave."];
+
+/**
+ * True when the key belongs to the ERP operations world. The single definition
+ * of "erp.*" membership, shared by the world gate and the route map.
+ */
+export function isErpWorldPermission(permission: string): boolean {
+    return (
+        permission.startsWith("erp.") &&
+        !NON_WORLD_ERP_PREFIXES.some((prefix) => permission.startsWith(prefix))
+    );
+}
+
 export const MODULE_ORDER: ModuleKey[] = ["agents", "erp", "intelligence"];
 
 const NO_ACCESS: ModuleAccess = {
@@ -41,9 +65,7 @@ export function resolveModuleAccess(permissions: string[]): ModuleAccess {
     const set = new Set(permissions);
     const all = set.has(WILDCARD);
     return {
-        erp:
-            all ||
-            permissions.some((permission) => permission.startsWith("erp.")),
+        erp: all || permissions.some(isErpWorldPermission),
         agents: all || set.has(AGENTS_READ),
         intelligence: all || set.has(INTELLIGENCE_READ),
     };
@@ -56,6 +78,21 @@ export function accessibleModules(access: ModuleAccess): ModuleKey[] {
 /** True when the user holds the exact permission or the `*` wildcard. */
 export function hasPermission(permissions: string[], key: string): boolean {
     return permissions.includes(WILDCARD) || permissions.includes(key);
+}
+
+/**
+ * True when the user holds EVERY permission in `keys`, or the `*` wildcard.
+ *
+ * Mirrors the backend's `require_all_permissions` (the AI proxy matrix is the
+ * main caller: `erp.ai.invoke` AND the module read key, or the narrator's
+ * invoke + all four module reads). A single-key list behaves identically to
+ * `hasPermission`.
+ */
+export function hasAllPermissions(
+    permissions: string[],
+    keys: string[],
+): boolean {
+    return permissions.includes(WILDCARD) || keys.every((key) => permissions.includes(key));
 }
 
 const INITIAL_STATE: ModuleAccessState = {
@@ -79,6 +116,12 @@ const ACCESS_CACHE_TTL_MS = 5 * 60 * 1000;
 let inFlight: Promise<ModuleAccessState> | null = null;
 let cachedState: ModuleAccessState | null = null;
 let cachedAt = 0;
+/**
+ * The tenant slug the cached set was resolved for. Effective permissions are
+ * tenant-scoped (identity resolves roles per tenant), so an answer fetched in
+ * workspace A must never answer for workspace B.
+ */
+let cachedTenant: string | null = null;
 
 /**
  * Single-flight, short-lived-cached resolver so the shell, route guard, and
@@ -92,6 +135,9 @@ let cachedAt = 0;
  */
 function fetchAccessState(): Promise<ModuleAccessState> {
     if (inFlight) return inFlight;
+    // Capture the tenant this request is FOR before it leaves: a workspace
+    // switch mid-flight must not stamp the previous tenant's answer as current.
+    const tenant = getTenantSlug();
     inFlight = getMyRoles()
         .then((data) => {
             const next: ModuleAccessState = {
@@ -102,6 +148,7 @@ function fetchAccessState(): Promise<ModuleAccessState> {
             };
             cachedState = next;
             cachedAt = Date.now();
+            cachedTenant = tenant;
             return next;
         })
         .catch(() => {
@@ -129,9 +176,26 @@ function fetchAccessState(): Promise<ModuleAccessState> {
  * client-side callers (the hook's effect), but the guard makes that invariant
  * structural instead of accidental.
  */
+/**
+ * The cached set, but only while it still belongs to the current tenant.
+ *
+ * Effective permissions are tenant-scoped (identity resolves roles per tenant),
+ * so an answer fetched in workspace A must never answer for workspace B: a
+ * workspace switch inside one client session drops the previous set instead of
+ * rendering tenant A's navigation in tenant B.
+ */
+function currentCache(): { state: ModuleAccessState; at: number } | null {
+    if (!cachedState) return null;
+    if (cachedTenant !== getTenantSlug()) {
+        clearModuleAccess();
+        return null;
+    }
+    return { state: cachedState, at: cachedAt };
+}
+
 function peekAccessState(): ModuleAccessState | null {
     if (typeof window === "undefined") return null;
-    return cachedState;
+    return currentCache()?.state ?? null;
 }
 
 /**
@@ -142,13 +206,15 @@ function peekAccessState(): ModuleAccessState | null {
  * previous answer keeps the chrome stable instead of flashing a skeleton.
  */
 export async function getModuleAccess(): Promise<ModuleAccessState> {
-    const cached = cachedState;
-    if (cached && Date.now() - cachedAt < ACCESS_CACHE_TTL_MS) return cached;
+    const cached = currentCache();
+    if (cached && Date.now() - cached.at < ACCESS_CACHE_TTL_MS) {
+        return cached.state;
+    }
     if (cached) {
         // Stale-while-revalidate: hand back the previous answer and refresh in
         // the background so the caller never falls back to a loading state.
         void fetchAccessState();
-        return cached;
+        return cached.state;
     }
     return fetchAccessState();
 }
@@ -172,6 +238,32 @@ export async function refreshModuleAccess(): Promise<ModuleAccessState> {
 export function clearModuleAccess(): void {
     cachedState = null;
     cachedAt = 0;
+    cachedTenant = null;
+}
+
+/**
+ * How stale a resolved answer may be before regaining focus revalidates it.
+ *
+ * Dynamic RBAC: permissions can change without the role NAME changing (a role
+ * edit, a new grant, a workspace move), and there is no push channel. A short
+ * window keeps a change from being stuck for the whole 5-minute TTL while still
+ * coalescing ordinary tab switching onto the existing answer.
+ */
+const ACCESS_FOCUS_REVALIDATE_MS = 60 * 1000;
+
+/**
+ * Revalidate only when the cached answer has aged past `maxAgeMs`.
+ *
+ * Used by the focus/visibility revalidation path, where a perfectly fresh
+ * answer must not cost a request. Concurrent callers coalesce onto the same
+ * in-flight request.
+ */
+export async function revalidateModuleAccessIfStale(
+    maxAgeMs: number = ACCESS_FOCUS_REVALIDATE_MS,
+): Promise<ModuleAccessState> {
+    const cached = currentCache();
+    if (cached && Date.now() - cached.at < maxAgeMs) return cached.state;
+    return fetchAccessState();
 }
 
 /**
@@ -191,6 +283,32 @@ export function useModuleAccess(): ModuleAccessState {
         });
         return () => {
             cancelled = true;
+        };
+    }, []);
+
+    // Dynamic RBAC: re-resolve when the tab regains focus and the answer has
+    // aged past the revalidate window, so nav + route guards pick up a role
+    // edit / grant / revocation instead of serving a stale set for the whole
+    // session.
+    //
+    // A FAILED refresh never replaces a working answer: a transient blip must
+    // not strip a user's navigation or bounce them off a page they may
+    // legitimately use. The initial load is still fail-closed (it has no
+    // previous answer to keep).
+    useEffect(() => {
+        let cancelled = false;
+        function revalidate() {
+            if (document.visibilityState === "hidden") return;
+            void revalidateModuleAccessIfStale().then((next) => {
+                if (!cancelled && next.status === "ready") setState(next);
+            });
+        }
+        window.addEventListener("focus", revalidate);
+        document.addEventListener("visibilitychange", revalidate);
+        return () => {
+            cancelled = true;
+            window.removeEventListener("focus", revalidate);
+            document.removeEventListener("visibilitychange", revalidate);
         };
     }, []);
 

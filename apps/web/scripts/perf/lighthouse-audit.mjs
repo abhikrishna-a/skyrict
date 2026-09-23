@@ -138,10 +138,19 @@ function whichMfaPath(page, timeoutMs = 15_000) {
 }
 
 async function waitForWorkspaceSettled(page) {
+  // Each sub-wait must honor the workflow's declared login budget rather than a
+  // hardcoded floor. CI passes E2E_LOGIN_TIMEOUT_MS=60000 (lighthouse.yml) to
+  // cover the cold-boot MFA handoff + workspace settle chain (~6s warm,
+  // 15-20s on a freshly booted runner); waiting on a 20s sub-budget threw that
+  // away and made a slow-but-correct handoff time out at line 144 (the email
+  // text) exactly as waitForWorkspaceSettled does in auth-flow.ts. The budget
+  // is login setup, never the measured page, so generous is correct.
+  const settleTimeout =
+    Number(process.env.E2E_LOGIN_TIMEOUT_MS ?? 60_000);
   await page.getByRole("link", { name: "Skyrict dashboard", exact: true })
-    .waitFor({ timeout: 20_000 });
+    .waitFor({ timeout: settleTimeout });
   await page.getByText(ADMIN_EMAIL, { exact: true }).first()
-    .waitFor({ timeout: 20_000 });
+    .waitFor({ timeout: settleTimeout });
 }
 
 async function login(page) {

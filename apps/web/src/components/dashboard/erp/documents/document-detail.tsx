@@ -1,4 +1,5 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -6,7 +7,6 @@ import {
     Download,
     FilePlus2,
     FileText,
-    Sparkles,
     Trash2,
 } from "lucide-react";
 
@@ -289,7 +289,7 @@ export function DocumentDetail({ id }: { id: string }) {
                                         document.aiTags.length === 0
                                     }
                                 >
-                                    <Sparkles aria-hidden="true" className="mr-1.5 size-3.5" />
+                                    <AiGlyph aria-hidden="true" className="mr-1.5 size-3.5" />
                                     Confirm AI tags
                                 </Button>
                             ) : null}
@@ -327,7 +327,7 @@ export function DocumentDetail({ id }: { id: string }) {
                                                 key={tag}
                                                 className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs text-primary"
                                             >
-                                                <Sparkles aria-hidden="true" className="size-3" />
+                                                <AiGlyph aria-hidden="true" className="size-3" />
                                                 {tag}
                                             </span>
                                         ))}

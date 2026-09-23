@@ -27,12 +27,21 @@ from ai_agent.features.finance.gateway import (
     TrialBalanceRowRef,
 )
 from ai_agent.features.supervisor.delegates import FinanceDelegator
+from ai_agent.graphs.security import (
+    PERM_AI_INVOKE,
+    PERM_CRM_READ,
+    PERM_FINANCE_READ,
+)
 
 if TYPE_CHECKING:
     from ai_agent.features.supervisor.schemas import Citation
 
 TENANT_ID = uuid.uuid4()
 USER_ID = uuid.uuid4()
+
+# A real chat caller holds erp.ai.invoke plus the module key; the delegate's
+# intrinsic gate requires at least erp.finance.read to run any gateway read.
+FINANCE_GRANTS = frozenset({PERM_AI_INVOKE, PERM_FINANCE_READ})
 
 
 class FakeLlmRouter:
@@ -122,7 +131,60 @@ def make_delegator(router: FakeLlmRouter, gateway: FakeFinanceGateway) -> Financ
     async def factory() -> FakeFinanceGateway:
         return gateway
 
-    return FinanceDelegator(llm_router=router, finance_gateway_factory=factory)
+    return FinanceDelegator(
+        llm_router=router,
+        finance_gateway_factory=factory,
+        granted_permissions=FINANCE_GRANTS,
+    )
+
+
+async def test_stream_refuses_without_finance_grant_and_never_queries_gateway() -> None:
+    """Fail-closed intrinsic gate: a CRM-only caller's delegate streams the
+    permission denial and the finance gateway is never constructed or read."""
+
+    async def forbidden_factory() -> FakeFinanceGateway:
+        raise AssertionError("finance gateway must not be constructed without erp.finance.read")
+
+    router = FakeLlmRouter()
+    delegator = FinanceDelegator(
+        llm_router=router,
+        finance_gateway_factory=forbidden_factory,
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_CRM_READ}),
+    )
+
+    text = await collect(delegator, "net income")
+
+    assert "You don't have permission to ask about Finance Assistant" in text
+    # The premium refusal names only the caller's real scope - never finance.
+    assert "Your access is scoped to CRM Assistant" in text
+    # No LLM fallback ran and the gateway factory was never reached.
+    assert router.calls == []
+
+
+async def test_stream_with_wildcard_grant_passes_the_gate() -> None:
+    """A wildcard (\"*\") caller is a tenant owner: the intrinsic gate must
+    PASS, so the fail-closed default never regresses the full-access path -
+    the gateway is constructed and no permission denial is emitted."""
+
+    constructed: list[bool] = []
+
+    async def spy_factory() -> FakeFinanceGateway:
+        constructed.append(True)
+        return FakeFinanceGateway()
+
+    router = FakeLlmRouter()
+    delegator = FinanceDelegator(
+        llm_router=router,
+        finance_gateway_factory=spy_factory,
+        granted_permissions=frozenset({PERM_AI_INVOKE, "*"}),
+    )
+
+    text = await collect(delegator, "net income")
+
+    # The gate passed: the gateway factory was reached and the refusal was not
+    # emitted (whichever legitimate answering path the query takes).
+    assert constructed == [True]
+    assert "You don't have permission to ask about Finance Assistant" not in text
 
 
 def _invoice(status: str = "issued", total: str = "100.0000", month: int = 8) -> InvoiceRef:

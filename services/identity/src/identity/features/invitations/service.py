@@ -16,7 +16,7 @@ from identity.core.constants import INVITATION_TOKEN_EXPIRE_DAYS
 from identity.core.email import EmailService
 from identity.core.security import hash_invitation_token, hash_password, validate_password_policy
 from identity.db.session import async_session_factory
-from identity.domain.entities import Invitation, User
+from identity.domain.entities import Invitation, MembershipStatus, User
 from identity.features.invitations.ports import InvitationRepositoryPort
 from skyrict_common.exceptions import (
     InvitationAlreadyUsedError,
@@ -83,13 +83,35 @@ class InvitationService:
             raise ValidationError("A user with this email already exists in this organization")
 
         # The INVITED membership reserves the email within the tenant; it is
-        # the canonical pending relationship (no placeholder user).
-        membership = await self.membership_service.create_invited(
-            tenant_id=tenant_id,
-            email=email,
-            role_id=role.id,
-            invited_by_user_id=created_by_user_id,
-        )
+        # the canonical pending relationship (no placeholder user). When that
+        # reservation belongs to a DEAD invite (time-expired or admin-expired)
+        # the email must be re-invitable: the same row is renewed in place so
+        # the tenant keeps one INVITED membership per email. A LIVE invitation
+        # still blocks a re-send.
+        membership = await self.membership_service.get_by_email(tenant_id, email)
+        if membership is not None and membership.status is not MembershipStatus.INVITED:
+            raise ValidationError("This email is already a member or invited in this organization")
+
+        prior_invitation = await self.invitation_repo.get_by_email(tenant_id, email)
+        if prior_invitation is not None and self._is_live(prior_invitation):
+            raise ValidationError(
+                "This email already has a pending invitation in this organization"
+            )
+
+        if membership is not None:
+            assert membership.id is not None
+            membership = await self.membership_service.renew_invited(
+                membership_id=membership.id,
+                role_id=role.id,
+                invited_by_user_id=created_by_user_id,
+            )
+        else:
+            membership = await self.membership_service.create_invited(
+                tenant_id=tenant_id,
+                email=email,
+                role_id=role.id,
+                invited_by_user_id=created_by_user_id,
+            )
 
         token = secrets.token_urlsafe(32)
         if expires_in_hours is not None:
@@ -143,6 +165,15 @@ class InvitationService:
         invitation = await self._load_valid_invitation(token)
         tenant = await self.tenant_repo.get_by_id(invitation.tenant_id)
         return invitation, tenant.name if tenant is not None else None
+
+    @staticmethod
+    def _is_live(invitation: Invitation) -> bool:
+        """An invitation still reserves the email while unexpired AND unused.
+
+        ``used_at`` alone is not enough: an admin "expire" also stamps
+        ``used_at`` (with no user), so a dead invite must not block a re-send.
+        """
+        return invitation.used_at is None and invitation.expires_at >= datetime.now(UTC)
 
     async def _load_valid_invitation(self, token: str) -> Invitation:
         invitation = await self.invitation_repo.get_by_token(token)
@@ -259,7 +290,9 @@ class InvitationService:
         ``core_roles`` / ``core_user_roles`` - would never see invitees. Both
         services share one database, so this writes the same upserts core's
         own ``apply_role_grants`` consumer handler performs (same composite-PK
-        shapes, same scope semantics: scope_id = tenant id).
+        shapes, same scope semantics: scope_id = tenant id). Permissions are
+        REPLACED on conflict (never merged), so a role edit that removed
+        permissions propagates to core on the next invite accept.
 
         Additionally binds the invited employee record: when exactly ONE
         non-terminated ``erp_employees`` row in the tenant carries the
@@ -281,17 +314,17 @@ class InvitationService:
                 await session.execute(
                     text(
                         "INSERT INTO core_roles (tenant_id, id, name, permissions, is_system_role) "
-                        "VALUES (:tid, :rid, :rname, :perms, true) "
+                        "VALUES (:tid, :rid, :rname, :perms, :sys) "
                         "ON CONFLICT (tenant_id, name) DO UPDATE SET "
-                        "permissions = (SELECT array_agg(DISTINCT p) FROM unnest("
-                        "core_roles.permissions || EXCLUDED.permissions) AS p), "
-                        "is_system_role = true, updated_at = now()"
+                        "permissions = EXCLUDED.permissions, "
+                        "is_system_role = EXCLUDED.is_system_role, updated_at = now()"
                     ),
                     {
                         "tid": tenant_id,
                         "rid": role_id,
                         "rname": role_name,
                         "perms": permissions,
+                        "sys": bool(getattr(role, "is_system_role", True)),
                     },
                 )
                 row = (

@@ -66,7 +66,7 @@ test("invite link is created, accepted, and the invitee appears in the members t
 
     await ownerPage.goto(`${workspaceUrl(SLUG)}/dashboard/invite`);
     await expect(
-        ownerPage.getByRole("heading", { name: "Invite team", exact: true }),
+        ownerPage.getByRole("heading", { name: "Invite member", exact: true }),
     ).toBeVisible();
 
     await ownerPage.getByLabel("Email address").fill(inviteeEmail);

@@ -51,6 +51,16 @@ services:
       IDENTITY_DB_MAX_OVERFLOW: "10"
       IDENTITY_DB_POOL_RECYCLE: "1800"
       IDENTITY_REDIS_URL: redis://skyrict-redis:6379/0
+      # uv workspace builds (identity + skyrict-common/-events) run at every
+      # container start because the bind-mounted source tree invalidates the
+      # baked venv. Persist uv's cache so the re-sync is a fast no-op on
+      # restart; without it a cold boot (~36s+, longer first time) can outlast
+      # the healthcheck window and flip the container unhealthy.
+      UV_CACHE_DIR: /uv-cache
+      # uvicorn --reload crashes with watchfiles "Input/output error (os error
+      # 5)" on Docker Desktop bind mounts (gRPC-FUSE inotify bug). Force
+      # polling so the dev container stays healthy instead of exiting 255.
+      WATCHFILES_FORCE_POLLING: "true"
       # Trust the Docker network so the identity service reads the real client
       # IP from X-Forwarded-For (appended by the nginx proxy) instead of
       # recording nginx's own container IP on every session. Dev-only:
@@ -73,10 +83,11 @@ services:
       # The dev CMD runs from /app/services/identity, so the relative key
       # paths in services/identity/.env resolve to /app/services/identity/.dev/keys.
       - ../../.dev/keys:/app/services/identity/.dev/keys:ro
+      - uv-cache:/uv-cache
     # Dev boot: migrate the DB before uvicorn starts so the database can never
     # silently drift behind the code. Production runs migrations out-of-band;
     # this override is dev-only.
-    command: ["sh", "-c", "uv run --directory services/identity alembic upgrade head && uv run --directory services/identity uvicorn identity.main:app --reload --host 0.0.0.0 --port 8000 --no-proxy-headers"]
+    command: ["sh", "-c", "uv run --frozen --directory services/identity alembic upgrade head && uv run --frozen --directory services/identity uvicorn identity.main:app --reload --host 0.0.0.0 --port 8000 --no-proxy-headers"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -88,7 +99,10 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 10s
       timeout: 5s
-      start_period: 15s
+      # Generous grace: first boot runs alembic upgrade + uvicorn startup; the
+      # uv re-sync is fast now (persisted UV_CACHE_DIR) but a genuinely cold
+      # start must not flip the container unhealthy mid-migration.
+      start_period: 60s
       retries: 3
 
   # ---------- Core Service (dev target - live reload) ----------
@@ -125,11 +139,18 @@ services:
       # Outbound payment-reminder email -> Mailpit container (Web UI: http://localhost:8025).
       CORE_EMAIL_SMTP_HOST: mailpit
       CORE_EMAIL_SMTP_PORT: "1025"
+      # See the identity service block: persist uv's cache so the bind-mounted
+      # source tree does not force a slow workspace rebuild at every start.
+      UV_CACHE_DIR: /uv-cache
+      # See the identity service block: uvicorn --reload dies with watchfiles
+      # "os error 5" on Docker Desktop bind mounts; force polling to keep the
+      # container healthy.
+      WATCHFILES_FORCE_POLLING: "true"
     # Dev boot: migrate the DB before uvicorn starts so the database can never
     # silently drift behind the code (a stale upgrade head left the reports
     # permission and other tables missing, breaking generate/save). Production
     # runs migrations out-of-band; this override is dev-only.
-    command: ["sh", "-c", "uv run --directory services/core alembic upgrade head && uv run --directory services/core uvicorn core.main:app --reload --host 0.0.0.0 --port 8001"]
+    command: ["sh", "-c", "uv run --frozen --directory services/core alembic upgrade head && uv run --frozen --directory services/core uvicorn core.main:app --reload --host 0.0.0.0 --port 8001"]
     volumes:
       - ../../services/core/src:/app/services/core/src
       - ../../services/core/alembic:/app/services/core/alembic
@@ -139,6 +160,7 @@ services:
       # The dev CMD runs from /app/services/core, so the relative key path in
       # services/core/.env resolves to /app/services/core/.dev/keys.
       - ../../.dev/keys:/app/services/core/.dev/keys:ro
+      - uv-cache:/uv-cache
     depends_on:
       postgres:
         condition: service_healthy
@@ -146,7 +168,7 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/api/v1/health')"]
       interval: 10s
       timeout: 5s
-      start_period: 15s
+      start_period: 60s
       retries: 3
 
   # ---------- AI Agent Service (dev target - live reload) ----------
@@ -174,6 +196,13 @@ services:
       # identity/core; migrates under its own alembic_version_ai table.
       AI_DATABASE_URL: postgresql+asyncpg://skyrict:skyrict@skyrict-postgres:5432/skyrict_identity
       AI_REDIS_URL: redis://skyrict-redis:6379/0
+      # See the identity service block: persist uv's cache so the bind-mounted
+      # source tree does not force a slow workspace rebuild at every start.
+      UV_CACHE_DIR: /uv-cache
+      # See the identity service block: uvicorn --reload dies with watchfiles
+      # "os error 5" on Docker Desktop bind mounts; force polling to keep the
+      # container healthy.
+      WATCHFILES_FORCE_POLLING: "true"
       # --- Dev LLM chain (in-container contract, see test_compose_llm_chain_contract) ---
       # Provider/model/keys come from services/ai-agent/.env (env_file). The
       # host-oriented AI_BASE_URL there (http://localhost:20128/v1) resolves to
@@ -211,10 +240,11 @@ services:
       # The dev CMD runs from /app/services/ai-agent, so the relative key path
       # in services/ai-agent/.env resolves to /app/services/ai-agent/.dev/keys.
       - ../../.dev/keys:/app/services/ai-agent/.dev/keys:ro
+      - uv-cache:/uv-cache
     # Dev boot: migrate the DB before uvicorn starts so the database can never
     # silently drift behind the code. Production runs migrations out-of-band;
     # this override is dev-only.
-    command: ["sh", "-c", "uv run --directory services/ai-agent alembic upgrade head && uv run --directory services/ai-agent uvicorn ai_agent.main:app --reload --host 0.0.0.0 --port 8000"]
+    command: ["sh", "-c", "uv run --frozen --directory services/ai-agent alembic upgrade head && uv run --frozen --directory services/ai-agent uvicorn ai_agent.main:app --reload --host 0.0.0.0 --port 8000"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -224,7 +254,7 @@ services:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health')"]
       interval: 10s
       timeout: 5s
-      start_period: 15s
+      start_period: 60s
       retries: 3
 
   # ---------- Ollama (local embedding provider - SKY-58 / SKY-70) ----------
@@ -289,3 +319,6 @@ volumes:
   # Persist chat attachment blobs (local storage backend) across container
   # recreation - attachment durability for conversation messages (SKY-60).
   ai-agent-attachments:
+  # uv build cache shared by the service containers: keeps the container-start
+  # workspace re-sync cheap so slow cold boots cannot flip services unhealthy.
+  uv-cache:

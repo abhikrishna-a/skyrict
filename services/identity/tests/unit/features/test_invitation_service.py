@@ -40,6 +40,17 @@ class FakeInvitationRepo:
                 return inv
         return None
 
+    async def get_by_email(self, tenant_id: str | uuid.UUID, email: str) -> Invitation | None:
+        matches = [
+            inv
+            for inv in self.invitations.values()
+            if str(inv.tenant_id) == str(tenant_id)
+            and inv.email.strip().lower() == email.strip().lower()
+        ]
+        if not matches:
+            return None
+        return max(matches, key=lambda inv: inv.created_at)
+
     async def mark_used(
         self, invitation_id: str | uuid.UUID, user_id: str | uuid.UUID | None
     ) -> Invitation:
@@ -233,6 +244,33 @@ class FakeMembershipService:
         membership.joined_at = datetime.now(UTC)
         return membership
 
+    async def get_by_email(self, tenant_id: str | uuid.UUID, email: str) -> Membership | None:
+        normalized = email.strip().lower()
+        for membership in [*self.invited, *self.active]:
+            if membership.invited_email == normalized and str(membership.tenant_id) == str(
+                tenant_id
+            ):
+                return membership
+        return None
+
+    async def renew_invited(
+        self,
+        *,
+        membership_id: str | uuid.UUID,
+        role_id: str | uuid.UUID,
+        invited_by_user_id: str | uuid.UUID,
+    ) -> Membership:
+        membership = next(
+            (m for m in self.invited if m.id == uuid.UUID(str(membership_id))),
+            None,
+        )
+        if membership is None:
+            raise NotFoundError("Membership not found")
+        membership.role_id = uuid.UUID(str(role_id))
+        membership.invited_by_user_id = uuid.UUID(str(invited_by_user_id))
+        membership.invited_at = datetime.now(UTC)
+        return membership
+
 
 class FakeTenantRepo:
     def __init__(self) -> None:
@@ -370,6 +408,126 @@ class TestCreateInvitation:
                 email="new@test.com",
                 role_name="viewer",
                 created_by_user_id=uuid.uuid4(),
+            )
+
+    async def test_reinvite_allowed_after_time_expiry_renews_reservation(
+        self,
+        service: InvitationService,
+        repos: tuple,
+        tenant_id: uuid.UUID,
+    ) -> None:
+        inv_repo, _, _, role_repo, email, membership_service = repos
+        inviter_id = uuid.uuid4()
+        role = await role_repo.create(
+            Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
+        )
+        prior = await inv_repo.create(
+            Invitation(
+                tenant_id=tenant_id,
+                email="returning@test.com",
+                token_hash=hash_invitation_token("expired-token"),
+                role_name=DEFAULT_INVITE_ROLE,
+                created_by_user_id=inviter_id,
+                expires_at=datetime.now(UTC) - timedelta(hours=1),
+            )
+        )
+        # The INVITED membership reservation the dead invite left behind.
+        reserved = await membership_service.create_invited(
+            tenant_id=tenant_id,
+            email="returning@test.com",
+            role_id=role.id,
+            invited_by_user_id=inviter_id,
+        )
+
+        invitation, token = await service.create_invitation(
+            tenant_id=tenant_id,
+            email="returning@test.com",
+            role_name=DEFAULT_INVITE_ROLE,
+            created_by_user_id=inviter_id,
+        )
+
+        assert invitation.id is not None and invitation.id != prior.id
+        assert invitation.token_hash == hash_invitation_token(token)
+        assert invitation.membership_id == reserved.id  # same reservation row
+        assert len(email.sent) == 1
+        assert email.sent[0]["to"] == "returning@test.com"
+
+    async def test_reinvite_allowed_after_admin_expiry(
+        self,
+        service: InvitationService,
+        repos: tuple,
+        tenant_id: uuid.UUID,
+    ) -> None:
+        inv_repo, _, _, role_repo, email, membership_service = repos
+        inviter_id = uuid.uuid4()
+        role = await role_repo.create(
+            Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
+        )
+        prior = await inv_repo.create(
+            Invitation(
+                tenant_id=tenant_id,
+                email="expired@test.com",
+                token_hash=hash_invitation_token("admin-expired-token"),
+                role_name=DEFAULT_INVITE_ROLE,
+                created_by_user_id=inviter_id,
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+        # Admin "Expire" stamps used_at with no user - the invite is dead even
+        # though expires_at is still in the future.
+        await inv_repo.mark_used(prior.id, None)
+        reserved = await membership_service.create_invited(
+            tenant_id=tenant_id,
+            email="expired@test.com",
+            role_id=role.id,
+            invited_by_user_id=inviter_id,
+        )
+
+        invitation, _ = await service.create_invitation(
+            tenant_id=tenant_id,
+            email="expired@test.com",
+            role_name=DEFAULT_INVITE_ROLE,
+            created_by_user_id=inviter_id,
+        )
+
+        assert invitation.membership_id == reserved.id
+        assert len(email.sent) == 1
+        assert email.sent[0]["to"] == "expired@test.com"
+
+    async def test_reinvite_blocked_while_live_invitation_outstanding(
+        self,
+        service: InvitationService,
+        repos: tuple,
+        tenant_id: uuid.UUID,
+    ) -> None:
+        inv_repo, _, _, role_repo, _, membership_service = repos
+        inviter_id = uuid.uuid4()
+        role = await role_repo.create(
+            Role(tenant_id=tenant_id, name=DEFAULT_INVITE_ROLE, permissions=["users:read"])
+        )
+        await inv_repo.create(
+            Invitation(
+                tenant_id=tenant_id,
+                email="pending@test.com",
+                token_hash=hash_invitation_token("live-token"),
+                role_name=DEFAULT_INVITE_ROLE,
+                created_by_user_id=inviter_id,
+                expires_at=datetime.now(UTC) + timedelta(days=7),
+            )
+        )
+        await membership_service.create_invited(
+            tenant_id=tenant_id,
+            email="pending@test.com",
+            role_id=role.id,
+            invited_by_user_id=inviter_id,
+        )
+
+        with pytest.raises(ValidationError, match="pending invitation"):
+            await service.create_invitation(
+                tenant_id=tenant_id,
+                email="pending@test.com",
+                role_name=DEFAULT_INVITE_ROLE,
+                created_by_user_id=inviter_id,
             )
 
 

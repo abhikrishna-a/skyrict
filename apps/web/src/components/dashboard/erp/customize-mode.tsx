@@ -46,6 +46,14 @@ export interface CustomizeLayoutItem {
 interface CustomizeModeProps {
     /** Current layout. */
     layout: CustomizeLayoutItem[];
+    /**
+     * Granted permission keys, used to hide widgets the user cannot render
+     * (all-of per widget, mirroring `filterWidgetsByPermissions`). A user
+     * without the required keys must not see the denied widget rows here any
+     * more than on the grid; unknown/legacy ids with no registry entry are
+     * kept so saving never silently strips them.
+     */
+    permissions: string[];
     /** Called when the user saves changes. */
     onSave: (layout: CustomizeLayoutItem[]) => Promise<void> | void;
     /** Called when the user resets to default. */
@@ -56,6 +64,22 @@ interface CustomizeModeProps {
     errorNotice?: string | null;
     /** Whether save is in progress. */
     isSaving?: boolean;
+}
+
+/** Keep only widget rows the user may render; unknown/legacy ids stay. */
+function filterDeniedWidgets(
+    layout: CustomizeLayoutItem[],
+    permissions: string[],
+): CustomizeLayoutItem[] {
+    return layout.filter((item) => {
+        const widget = getWidget(item.id);
+        if (!widget) return true;
+        if (!widget.permissions || widget.permissions.length === 0) return true;
+        return (
+            permissions.includes("*") ||
+            widget.permissions.every((key) => permissions.includes(key))
+        );
+    });
 }
 
 /**
@@ -69,14 +93,16 @@ interface CustomizeModeProps {
  */
 export function CustomizeMode({
     layout,
+    permissions,
     onSave,
     onReset,
     onClose,
     errorNotice,
     isSaving,
 }: CustomizeModeProps) {
-    const [localLayout, setLocalLayout] =
-        useState<CustomizeLayoutItem[]>(layout);
+    const [localLayout, setLocalLayout] = useState<CustomizeLayoutItem[]>(() =>
+        filterDeniedWidgets(layout, permissions),
+    );
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),

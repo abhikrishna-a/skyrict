@@ -11,11 +11,62 @@ import { browserSigninUrl } from "@/lib/auth/client-urls";
 
 export class ApiError extends Error {
   readonly status: number;
+  /**
+   * The raw backend detail, kept for logs and devtools. Never render this
+   * directly - `message` is already user-safe (see `toApiError`).
+   */
+  readonly detail: string;
+  /** True when the backend refused the call because a permission key is missing. */
+  readonly permissionDenied: boolean;
 
-  constructor(status: number, message: string) {
+  constructor(
+    status: number,
+    message: string,
+    options: { detail?: string; permissionDenied?: boolean } = {},
+  ) {
     super(message);
+    this.name = "ApiError";
     this.status = status;
+    this.detail = options.detail ?? message;
+    this.permissionDenied = options.permissionDenied ?? false;
   }
+}
+
+/**
+ * What a user sees when the backend refuses a call for a missing permission.
+ *
+ * The raw detail ("Missing required permission: erp.crm.read") names internal
+ * permission keys - developer/audit information. It is logged through
+ * `console.warn` and kept on `ApiError.detail`, never used as page UI.
+ */
+export const PERMISSION_DENIED_MESSAGE =
+  "You don't have permission to access this. Ask a workspace owner for access.";
+
+/** The backends' missing-permission refusal, across the error shapes they emit. */
+function isPermissionDenial(detail: string): boolean {
+  return (
+    /missing required permission/i.test(detail) ||
+    /insufficient[_\s-]?permissions/i.test(detail)
+  );
+}
+
+/**
+ * Build the error for a failed response. A 403 that is the backend's
+ * missing-permission refusal is normalized to a user-safe message; every other
+ * failure keeps its own detail so genuine failures stay diagnosable.
+ *
+ * This is a UX/leak guard, NOT authorization: the backend still decides, and a
+ * caller that needs the key (debugging, telemetry) reads `ApiError.detail`.
+ */
+function toApiError(status: number, detail: string): ApiError {
+  if (status === 403 && isPermissionDenial(detail)) {
+    console.warn(`[api] permission denied: ${detail}`);
+    return new ApiError(status, PERMISSION_DENIED_MESSAGE, {
+      detail,
+      permissionDenied: true,
+    });
+  }
+  return new ApiError(status, detail, { detail });
 }
 
 export interface PaginationMeta {
@@ -135,7 +186,7 @@ async function readPayload<T>(response: Response): Promise<Envelope<T>> {
       | ValidationIssue[];
   };
   if (!response.ok) {
-    throw new ApiError(response.status, extractErrorMessage(payload.detail));
+    throw toApiError(response.status, extractErrorMessage(payload.detail));
   }
   const hasData = payload && "data" in payload;
   return {
@@ -339,7 +390,7 @@ async function readBody<T>(response: Response): Promise<T> {
       (typeof payload.detail === "object" && payload.detail?.message) ||
       (typeof payload.detail === "string" ? payload.detail : null) ||
       "Request failed. Please try again.";
-    throw new ApiError(response.status, message);
+    throw toApiError(response.status, message);
   }
   return payload as T;
 }

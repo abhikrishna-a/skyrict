@@ -31,12 +31,17 @@ from typing import TYPE_CHECKING, ClassVar, Protocol
 
 import structlog
 
-from ai_agent.cache.response_cache import ResponseCache, tool_cache_key
+from ai_agent.cache.response_cache import (
+    ResponseCache,
+    permission_scope,
+    tool_cache_key,
+)
 from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.core.providers import LlmRequest
 from ai_agent.features.finance_intents import match_finance_intent, run_finance_intent
 from ai_agent.features.finance_intents.schemas import INTENT_META
 from ai_agent.features.memory_compaction.budget import ContextBudgetManager
+from ai_agent.features.supervisor.permissions import permission_denied_message
 from ai_agent.features.supervisor.prompt_builder import StablePromptBuilder
 from ai_agent.features.supervisor.prompts import (
     CRM_NO_ANSWER,
@@ -65,6 +70,11 @@ from ai_agent.features.supervisor.schemas import (
     AGENT_INVENTORY,
     AGENT_SALES_COACH,
     Citation,
+)
+from ai_agent.graphs.security import (
+    PERM_FINANCE_READ,
+    PERM_INVENTORY_READ,
+    grants_permission,
 )
 
 if TYPE_CHECKING:
@@ -203,11 +213,16 @@ class InventoryMonitorDelegator:
         gateway_factory: Callable[[], Awaitable[InventoryGatewayPort]],
         rag: RagSearchPort | None = None,
         forecast: ForecastPort | None = None,
+        granted_permissions: frozenset[str] = frozenset(),
     ) -> None:
         self._llm_router = llm_router
         self._gateway_factory = gateway_factory
         self._rag = rag
         self._forecast = forecast
+        # Defense-in-depth: the service leaf gate already refuses this delegate
+        # for callers without erp.inventory.read; this grants check keeps the
+        # RAG read gated even if a future caller drives the delegate directly.
+        self._granted_permissions = granted_permissions
 
     async def stream(
         self,
@@ -256,7 +271,9 @@ class InventoryMonitorDelegator:
         parts: list[str] = []
         lowered = query.casefold()
 
-        if self._rag is not None:
+        if self._rag is not None and grants_permission(
+            self._granted_permissions, PERM_INVENTORY_READ
+        ):
             try:
                 result = await self._rag.search(
                     query=query,
@@ -424,12 +441,16 @@ class CrmAssistantDelegator:
         memory_service: MemoryService | None = None,
         tool_cache: ResponseCache | None = None,
         tool_cache_ttl_seconds: int = 60,
+        granted_permissions: frozenset[str] = frozenset(),
     ) -> None:
         self._llm_router = llm_router
         self._crm_gateway_factory = crm_gateway_factory
         self._memory = memory_service
         self._tool_cache = tool_cache
         self._tool_cache_ttl_seconds = tool_cache_ttl_seconds
+        # Deterministic NL actions are cached per permission set: a figure
+        # computed under one role must never be served to a different one.
+        self._permission_scope = permission_scope(granted_permissions)
 
     async def stream(
         self,
@@ -635,6 +656,7 @@ class CrmAssistantDelegator:
                 tenant_id=tenant_id,
                 agent=self.key,
                 parts=(action, entity_type or "", query),
+                scope=self._permission_scope,
             )
             cached = await self._tool_cache.get(cache_key)
             if cached is not None:
@@ -699,6 +721,10 @@ class FinanceDelegator:
       * Every read forwards the caller's JWT + tenant slug, so core enforces
         ``erp.finance.read`` + tenant isolation. The context handed to the LLM
         is therefore exactly what the acting user may view in the finance UI.
+      * Fail closed at the delegate boundary: a ``stream`` call without
+        ``erp.finance.read`` in the resolved grants streams the permission
+        denial BEFORE any gateway is constructed, so a finance-only delegate
+        can never touch (or leak) finance data under a caller who lacks the key.
     """
 
     key = AGENT_FINANCE
@@ -711,11 +737,16 @@ class FinanceDelegator:
         finance_gateway_factory: Callable[[], Awaitable[FinanceGatewayPort]],
         tool_cache: ResponseCache | None = None,
         tool_cache_ttl_seconds: int = 60,
+        granted_permissions: frozenset[str] = frozenset(),
     ) -> None:
         self._llm_router = llm_router
         self._finance_gateway_factory = finance_gateway_factory
         self._tool_cache = tool_cache
         self._tool_cache_ttl_seconds = tool_cache_ttl_seconds
+        self._granted_permissions = granted_permissions
+        # Deterministic summaries are cached per permission set: a figure
+        # computed under one role must never be served to a different one.
+        self._permission_scope = permission_scope(granted_permissions)
 
     async def stream(
         self,
@@ -726,6 +757,20 @@ class FinanceDelegator:
         citations: list[Citation],
     ) -> AsyncIterator[str]:
         del user_id
+        # Intrinsic authz (defense in depth on top of the supervisor leaf
+        # gate): a finance delegate constructed without erp.finance.read must
+        # refuse BEFORE the gateway is built, so no finance read or context
+        # gather can ever run for a caller who lacks the key.
+        if not grants_permission(self._granted_permissions, PERM_FINANCE_READ):
+            logger.warning(
+                "supervisor.finance_denied_delegate",
+                permission_scope=self._permission_scope,
+            )
+            for delta in _iter_text_deltas(
+                permission_denied_message(self.display_name, self._granted_permissions)
+            ):
+                yield delta
+            return
         # A finance-only delegate must never invent figures: if finance is
         # unreachable at ANY point we stream the clean unavailable message, we
         # do not fall back to an ungrounded LLM answer.
@@ -863,6 +908,7 @@ class FinanceDelegator:
                 tenant_id=tenant_id,
                 agent=self.key,
                 parts=(query,),
+                scope=self._permission_scope,
             )
             cached = await self._tool_cache.get(cache_key)
             if cached is not None:

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 
 import { Footer } from "@/components/marketing/footer";
-import { Glows } from "@/components/marketing/glows";
 import { Header } from "@/components/marketing/header";
 import { JsonLd } from "@/components/seo/json-ld";
 import { site } from "@/config";
@@ -54,7 +53,6 @@ export default function MarketingLayout({
         <div className="flex min-h-screen flex-col bg-card">
             <JsonLd data={organization} />
             <JsonLd data={website} />
-            <Glows />
             <Header />
             <main className="flex-1">{children}</main>
             <Footer />

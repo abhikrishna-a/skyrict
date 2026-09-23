@@ -43,24 +43,24 @@ export function AgentsShell({ children }: { children: React.ReactNode }) {
                 closeMobile: () => setMobileOpen(false),
             }}
         >
-            <ModuleAccessBoundary module="agents">
-                <div
-                    className="flex h-dvh gap-2 overflow-hidden bg-muted/30 p-2 theme-agents"
-                    data-theme-scope
-                >
-                    <AgentsChatSidebar
-                        collapsed={collapsed}
-                        mobileOpen={mobileOpen}
-                        onCloseMobile={() => setMobileOpen(false)}
-                    />
-                    <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-sidebar">
-                        <main className="flex min-h-0 flex-1 flex-col">
+            <div
+                className="flex h-dvh gap-2 overflow-hidden bg-muted/30 p-2 theme-agents"
+                data-theme-scope
+            >
+                <AgentsChatSidebar
+                    collapsed={collapsed}
+                    mobileOpen={mobileOpen}
+                    onCloseMobile={() => setMobileOpen(false)}
+                />
+                <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-sidebar">
+                    <main className="flex min-h-0 flex-1 flex-col">
+                        <ModuleAccessBoundary module="agents">
                             {children}
-                            <p className="sr-only">{`Signed in as ${user?.email ?? "you"}`}</p>
-                        </main>
-                    </div>
+                        </ModuleAccessBoundary>
+                        <p className="sr-only">{`Signed in as ${user?.email ?? "you"}`}</p>
+                    </main>
                 </div>
-            </ModuleAccessBoundary>
+            </div>
         </AgentsUIContext.Provider>
     );
 }

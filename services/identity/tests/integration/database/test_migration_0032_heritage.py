@@ -7,11 +7,12 @@ shape* -- a system role named ``employee`` carrying the legacy
 ``hr.leave.self`` / ``hr.leave.request`` / ``hr.leave.admin`` grant keys, the
 shape 0019/0020-era services shipped -- upgrade to 0032, assert the grant keys
 were canonicalized (``erp.leave.*``) and the system role renamed to
-``employee_self_service``, assert collision-guarding (a tenant-created
-non-system ``employee`` role is left untouched; the canonical name is never
-created twice), assert idempotency on re-run, then downgrade 0032 -> 0031 and
-re-upgrade to prove the reverse round-trips idempotently and heritage rows
-survive.
+``employee_self_service``, assert idempotency on re-run, downgrade 0032 ->
+0031 and re-upgrade to prove the reverse round-trips idempotently and heritage
+rows survive (all in the single-role clean state), then assert collision-
+guarding (a tenant-created non-system ``employee`` role is left untouched; the
+canonical name is never created twice), and re-verify idempotency on that
+guarded state.
 
 The test owns its scratch database and never touches the shared test database
 (``migrated_schema``): it builds, probes, and destroys the database it seeds,
@@ -240,9 +241,6 @@ def test_0032_heritage_roundtrip() -> None:
 
         overrides = {"IDENTITY_DATABASE_URL": scratch_url}
 
-        asyncio.run(
-            _run_alembic,
-        )
         _run_alembic(_ALEMBIC_INI, ["upgrade", "0031"], overrides)
 
         tenant_id = asyncio.run(_seed_legacy_heritage(scratch_url))
@@ -253,12 +251,18 @@ def test_0032_heritage_roundtrip() -> None:
         _run_alembic(_ALEMBIC_INI, ["upgrade", "0032"], overrides)
         asyncio.run(_assert_roundtripped(scratch_url, tenant_id))
 
-        asyncio.run(_seed_collision_role(scratch_url, tenant_id))
-        _run_alembic(_ALEMBIC_INI, ["upgrade", "0032"], overrides)
-        asyncio.run(_assert_collision_guarded(scratch_url, tenant_id))
-
+        # Reverse round-trip on the single-role clean state: 0032 -> 0031 ->
+        # 0032 must return the tenant to exactly one canonical role. This must
+        # run BEFORE the collision phase -- once the tenant-created ``employee``
+        # role exists, the downgrade's collision guard (see 0032's downgrade)
+        # refuses to rename the canonical role back, so the tenant would hold
+        # two roles and the round-trip assertion could never hold.
         _run_alembic(_ALEMBIC_INI, ["downgrade", "0031"], overrides)
         _run_alembic(_ALEMBIC_INI, ["upgrade", "0032"], overrides)
         asyncio.run(_assert_roundtripped(scratch_url, tenant_id))
+
+        asyncio.run(_seed_collision_role(scratch_url, tenant_id))
+        _run_alembic(_ALEMBIC_INI, ["upgrade", "0032"], overrides)
+        asyncio.run(_assert_collision_guarded(scratch_url, tenant_id))
     finally:
         asyncio.run(_drop_scratch_db(maint_dsn, dbname))

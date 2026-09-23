@@ -14,7 +14,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from identity.events.producers import publish_event
-from skyrict_events.schemas import RbacRoleGranted, RoleGrant, TenantProvisioned
+from skyrict_events.schemas import (
+    RbacRoleGranted,
+    RbacRoleUpdated,
+    RoleGrant,
+    TenantProvisioned,
+)
 
 if TYPE_CHECKING:
     import uuid
@@ -55,6 +60,32 @@ async def emit_rbac_role_granted(
             is_system_role=is_system_role,
             user_id=str(user_id),
             scope_id=str(scope_id) if scope_id is not None else None,
+        ),
+    )
+    await publish_event(event.event_type, str(tenant_id), event.to_dict())
+
+
+async def emit_rbac_role_updated(
+    *,
+    tenant_id: str | uuid.UUID,
+    role_id: str | uuid.UUID,
+    role_name: str,
+    permissions: list[str],
+    is_system_role: bool,
+) -> None:
+    """Publish a role-definition change (create or edit) - no user grant.
+
+    Consumers refresh their role projection from this payload and REPLACE the
+    permission array (never merge), so permissions removed from a role stop
+    being enforced immediately rather than lingering until the next grant.
+    """
+    event = RbacRoleUpdated(
+        tenant_id=str(tenant_id),
+        role=RoleGrant(
+            role_id=str(role_id),
+            role_name=role_name,
+            permissions=permissions,
+            is_system_role=is_system_role,
         ),
     )
     await publish_event(event.event_type, str(tenant_id), event.to_dict())

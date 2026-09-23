@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { AppSidebar } from "@/components/dashboard/workspace/app-sidebar";
 import { Topbar } from "@/components/dashboard/workspace/topbar";
 import { ProductTour } from "@/components/dashboard/tour/product-tour";
+import { ModuleAccessBoundary } from "@/components/dashboard/shared/module-access-boundary";
 import {
     filterNavGroupsByPermissions,
     filterNavItemsByPermissions,
@@ -87,10 +88,18 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
                             : "overflow-y-auto",
                     )}
                 >
-                    <div className="mx-auto flex w-full min-h-0 max-w-6xl flex-1 flex-col px-4 py-6 lg:px-6 lg:py-8">
-                        <BillingTrialBanner />
-                        {children}
-                    </div>
+                    {/* Route gate: workspace pages that own a permission key
+                        (roles, members, invite, leave, AI-Agents sub-surfaces)
+                        resolve it from the pathname here, BEFORE the page
+                        mounts - a denied surface never renders and never fires
+                        its protected API call. Ungated pages (overview,
+                        settings, notifications, billing) resolve to null. */}
+                    <ModuleAccessBoundary>
+                        <div className="mx-auto flex w-full min-h-0 max-w-6xl flex-1 flex-col px-4 py-6 lg:px-6 lg:py-8">
+                            <BillingTrialBanner />
+                            {children}
+                        </div>
+                    </ModuleAccessBoundary>
                 </main>
             </div>
             <ProductTour />

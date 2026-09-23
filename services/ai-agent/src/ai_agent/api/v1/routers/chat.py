@@ -37,7 +37,7 @@ from ai_agent.cache.response_cache import RedisResponseCache
 from ai_agent.core.audit_service import AuditService
 from ai_agent.core.config import settings
 from ai_agent.core.embedding import build_embedding_provider
-from ai_agent.core.exceptions import AiUnavailableError
+from ai_agent.core.exceptions import AiRateLimitError, AiUnavailableError
 from ai_agent.core.rate_limit import limiter
 from ai_agent.core.tenant_context import TenantContext
 from ai_agent.db.audit_repository import AiAuditLogRepository
@@ -347,6 +347,16 @@ async def _event_stream(
     except AiUnavailableError as exc:
         logger.warning("chat.stream_unavailable", error=str(exc))
         yield _error_frame("The AI service is temporarily unavailable. Please try again.")
+    except AiRateLimitError as exc:
+        # The upstream gateway is cooling its credentials down (429 /
+        # model_cooldown) - a transient, retryable condition, NOT "temporarily
+        # unavailable" and NOT an internal error. Honest frame so the client
+        # shows the right copy instead of a misleading generic message.
+        logger.warning(
+            "chat.stream_rate_limited",
+            retry_after_seconds=exc.retry_after_seconds,
+        )
+        yield _error_frame("The AI service is rate-limited. Please try again in a moment.")
     except Exception:
         logger.exception("chat.stream_failed")
         yield _error_frame("An unexpected error occurred. Please try again.")

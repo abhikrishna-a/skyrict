@@ -10,7 +10,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { ApiError, apiFetch, apiPost } from "@/lib/api/http";
+import { ApiError, apiFetch, apiPost, PERMISSION_DENIED_MESSAGE } from "@/lib/api/http";
 import { getAccessToken, setAccessToken } from "@/lib/auth/session-store";
 
 interface RecordedRequest {
@@ -136,6 +136,62 @@ describe("fetchWithSession hydration", () => {
         ]);
         expect(requests[1].method).toBe("POST");
         expect(getAccessToken()).toBe("fresh-token");
+    });
+});
+
+describe("permission-denied errors", () => {
+    beforeEach(() => {
+        vi.spyOn(console, "warn").mockImplementation(() => {});
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it("hides the internal permission key behind a user-safe message", async () => {
+        respond = () =>
+            json({ detail: "Missing required permission: erp.crm.read" }, 403);
+
+        const error = await apiFetch("/api/v1/crm/leads").then(
+            () => null,
+            (err: unknown) => err as ApiError,
+        );
+
+        expect(error).not.toBeNull();
+        expect(error!.status).toBe(403);
+        expect(error!.permissionDenied).toBe(true);
+        // Page UI renders `message`: it must not name internal keys.
+        expect(error!.message).toBe(PERMISSION_DENIED_MESSAGE);
+        expect(error!.message).not.toContain("erp.crm.read");
+        // The raw detail stays available for logs and debugging.
+        expect(error!.detail).toBe("Missing required permission: erp.crm.read");
+        expect(console.warn).toHaveBeenCalledWith(
+            expect.stringContaining("Missing required permission: erp.crm.read"),
+        );
+    });
+
+    it("keeps every other failure diagnosable", async () => {
+        respond = () => json({ detail: "Only a tenant owner can manage billing" }, 403);
+
+        const error = await apiFetch("/api/v1/billing/plan").then(
+            () => null,
+            (err: unknown) => err as ApiError,
+        );
+
+        expect(error!.permissionDenied).toBe(false);
+        expect(error!.message).toBe("Only a tenant owner can manage billing");
+    });
+
+    it("does not treat a non-403 failure as a permission denial", async () => {
+        respond = () => json({ detail: "Missing required permission: x" }, 400);
+
+        const error = await apiFetch("/api/v1/crm/leads").then(
+            () => null,
+            (err: unknown) => err as ApiError,
+        );
+
+        expect(error!.permissionDenied).toBe(false);
+        expect(error!.message).toBe("Missing required permission: x");
     });
 });
 

@@ -1,8 +1,9 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useState } from "react";
-import { Sparkles, TriangleAlert } from "lucide-react";
+import { TriangleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -93,7 +94,7 @@ function AiDraftDialog({ open, onOpenChange, onApply }: AiDraftDialogProps) {
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
-                        <Sparkles className="size-4 text-primary" />
+                        <AiGlyph className="size-4 text-primary" />
                         AI Draft Entry
                     </DialogTitle>
                     <DialogDescription>
@@ -125,7 +126,7 @@ function AiDraftDialog({ open, onOpenChange, onApply }: AiDraftDialogProps) {
                                 {loading ? (
                                     <Spinner className="size-4" />
                                 ) : (
-                                    <Sparkles className="size-4" />
+                                    <AiGlyph className="size-4" />
                                 )}
                                 Generate
                             </Button>

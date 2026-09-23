@@ -35,6 +35,7 @@ import {
     type InvitationSummary,
     type RoleSummary,
 } from "@/lib/api/identity-api";
+import { invitationState, type InvitationStatus } from "@/lib/invitation-status";
 import { ListSkeleton } from "@/components/ui/page-skeletons";
 import { cn, copyToClipboard } from "@/lib/utils";
 
@@ -47,15 +48,6 @@ type Status =
           roles: RoleSummary[];
           busy: string | null;
       };
-
-function invitationState(
-    item: InvitationSummary,
-): "used" | "expired" | "pending" {
-    if (item.usedAt) return "used";
-    if (item.expiresAt && new Date(item.expiresAt).getTime() < Date.now())
-        return "expired";
-    return "pending";
-}
 
 function formatInvitedAt(value: string): string {
     return new Date(value).toLocaleDateString(undefined, {
@@ -75,7 +67,7 @@ function initialsFor(email: string): string {
 }
 
 const statusConfig: Record<
-    "used" | "expired" | "pending",
+    InvitationStatus,
     { label: string; dot: string; chip: string }
 > = {
     used: {
@@ -95,7 +87,7 @@ const statusConfig: Record<
     },
 };
 
-function StatusBadge({ state }: { state: "used" | "expired" | "pending" }) {
+function StatusBadge({ state }: { state: InvitationStatus }) {
     const config = statusConfig[state];
     return (
         <span
@@ -232,8 +224,8 @@ export default function InviteClient() {
     return (
         <div className="space-y-6">
             <PageHeader
-                title="Invite team"
-                description="Invite teammates with a link and keep an eye on pending invitations."
+                title="Invite member"
+                description="Invite a member with a link and keep an eye on pending invitations."
                 icon={UserPlus}
             />
 
@@ -388,12 +380,6 @@ export default function InviteClient() {
                                     )}
                                 </Button>
                             </div>
-                            <p className="text-[11px] text-muted-foreground">
-                                Token (shown once):{" "}
-                                <code className="break-all font-mono text-foreground">
-                                    {created.token}
-                                </code>
-                            </p>
                         </div>
                     ) : null}
                 </section>

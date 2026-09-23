@@ -30,9 +30,10 @@ import structlog
 from ai_agent.cache.response_cache import (
     ResponseCache,
     classification_cache_key,
+    permission_scope,
     response_cache_key,
 )
-from ai_agent.core.exceptions import AiUnavailableError
+from ai_agent.core.exceptions import AiRateLimitError, AiUnavailableError
 from ai_agent.features.attachments.processor import ProcessedAttachments, process_attachments
 from ai_agent.features.conversation_summary import ConversationSummaryStore, is_summary_fresh
 from ai_agent.features.memory_compaction.budget import ContextBudgetManager
@@ -50,12 +51,19 @@ from ai_agent.features.supervisor.delegates import (
     RagSearchPort,
     SalesCoachDelegator,
 )
+from ai_agent.features.supervisor.permissions import (
+    AGENT_REQUIRED_PERMISSIONS,
+    abstention_message,
+    accessible_module_guide,
+    greeting_message,
+    permission_denied_message,
+    supervisor_access_tail,
+)
 from ai_agent.features.supervisor.prompt_builder import StablePromptBuilder
 from ai_agent.features.supervisor.prompts import (
-    ABSTENTION,
     CLASSIFY_SYSTEM_PROMPT,
     DEGRADED,
-    GREETING,
+    RATE_LIMITED,
     SUPERVISOR_SYSTEM_PROMPT,
     not_provisioned_message,
 )
@@ -76,6 +84,7 @@ from ai_agent.features.supervisor.schemas import (
     SupervisorEvent,
     TokenEvent,
 )
+from ai_agent.graphs.security import grants_permission
 
 if TYPE_CHECKING:
     import uuid
@@ -234,6 +243,7 @@ class SupervisorService:
         conversation_summary: ConversationSummaryStore | None = None,
         summary_regenerator: Callable[[uuid.UUID, uuid.UUID], None] | None = None,
         provisioned: Mapping[str, bool],
+        granted_permissions: frozenset[str],
         confidence_threshold: float = 0.75,
         classification_cache: ResponseCache | None = None,
         response_cache: ResponseCache | None = None,
@@ -248,6 +258,15 @@ class SupervisorService:
         self._llm_router = llm_router
         self._confidence_threshold = confidence_threshold
         self._provisioned = dict(provisioned)
+        # The caller's effective grants, resolved ONCE per turn by the graph
+        # layer (which owns the session). The supervisor fails closed: a
+        # caller without the module's key is refused that leaf, and no caller
+        # ever receives a module's data through the general answer path.
+        self._granted_permissions = frozenset(granted_permissions)
+        # Cache keys are scoped by the caller's grant fingerprint: an answer
+        # grounded in one role's data must never be served from cache to a
+        # lesser-granted caller in the same tenant (V2 of the authz audit).
+        self._permission_scope = permission_scope(self._granted_permissions)
         self._classification_cache = classification_cache
         self._response_cache = response_cache
         self._classification_cache_ttl_seconds = classification_cache_ttl_seconds
@@ -262,6 +281,7 @@ class SupervisorService:
                 gateway_factory=gateway_factory,
                 rag=rag,
                 forecast=forecast,
+                granted_permissions=self._granted_permissions,
             )
         }
         if hr_copilot is not None:
@@ -273,6 +293,7 @@ class SupervisorService:
                 memory_service=memory_service,
                 tool_cache=tool_cache,
                 tool_cache_ttl_seconds=tool_cache_ttl_seconds,
+                granted_permissions=self._granted_permissions,
             )
         if finance_gateway_factory is not None:
             delegates[AGENT_FINANCE] = FinanceDelegator(
@@ -280,6 +301,7 @@ class SupervisorService:
                 finance_gateway_factory=finance_gateway_factory,
                 tool_cache=tool_cache,
                 tool_cache_ttl_seconds=tool_cache_ttl_seconds,
+                granted_permissions=self._granted_permissions,
             )
         if coach_suggestions is not None:
             delegates[AGENT_SALES_COACH] = SalesCoachDelegator(
@@ -362,6 +384,17 @@ class SupervisorService:
             except AiUnavailableError as exc:
                 logger.warning("supervisor.classifier_unavailable", error=str(exc))
                 return _keyword_route(query)
+            except AiRateLimitError as exc:
+                # A classifier rate limit must NOT silently degrade to keyword
+                # routing: the follow-up delegate call would hit the same
+                # gateway-wide cooldown, and the user would never learn the
+                # honest cause. Propagate so the turn surfaces the typed
+                # rate-limit frame.
+                logger.warning(
+                    "supervisor.classifier_rate_limited",
+                    retry_after_seconds=exc.retry_after_seconds,
+                )
+                raise
             try:
                 agents, confidence = _parse_classification(completion.text)
                 break
@@ -492,8 +525,21 @@ class SupervisorService:
                 agent="supervisor", display_name=AGENT_DISPLAY_NAMES["supervisor"]
             )
             if _is_greeting(query):
-                # Genuine greeting - a short, friendly redirect.
-                for event in _yield_text(agent="supervisor", text=GREETING):
+                # Genuine greeting - grant-scoped redirect: the greeting names
+                # only the modules the caller can actually access.
+                for event in _yield_text(
+                    agent="supervisor",
+                    text=greeting_message(self._granted_permissions),
+                ):
+                    yield event
+            elif _is_permission_question(query):
+                # Deterministic, grant-grounded answer to "what can I ask?" -
+                # no LLM, so the universal front-desk persona can never claim
+                # access the caller does not have (the reported hallucination).
+                for event in _yield_text(
+                    agent="supervisor",
+                    text=accessible_module_guide(self._granted_permissions),
+                ):
                     yield event
             else:
                 # A real question that did not route to a module: answer it as
@@ -526,6 +572,23 @@ class SupervisorService:
             display_name = AGENT_DISPLAY_NAMES.get(agent, agent)
             yield AgentStartEvent(agent=agent, display_name=display_name)
 
+            # Caller-grant gate (authz hardening): the classification may have
+            # routed to a module the caller cannot read. Refuse that leaf with
+            # a clean message instead of delegating - the runtime resolved the
+            # caller's grants once per turn and the general supervisor answer
+            # never carries module data. This also protects provisioned-but-
+            # ungated leaves (e.g. coach/guardian) from being driven through
+            # the chat edge with only ``erp.ai.invoke``.
+            required = AGENT_REQUIRED_PERMISSIONS.get(agent)
+            if required is not None and not grants_permission(self._granted_permissions, required):
+                for event in _yield_text(
+                    agent=agent,
+                    text=permission_denied_message(display_name, self._granted_permissions),
+                ):
+                    yield event
+                yield CitationsEvent(agent=agent, citations=())
+                continue
+
             if not self._provisioned.get(agent, False):
                 for event in _yield_text(agent=agent, text=not_provisioned_message(display_name)):
                     yield event
@@ -554,6 +617,14 @@ class SupervisorService:
             except AiUnavailableError as exc:
                 logger.warning("supervisor.delegate_unavailable", agent=agent, error=str(exc))
                 for event in _yield_text(agent=agent, text=DEGRADED):
+                    yield event
+            except AiRateLimitError as exc:
+                logger.warning(
+                    "supervisor.delegate_rate_limited",
+                    agent=agent,
+                    retry_after_seconds=exc.retry_after_seconds,
+                )
+                for event in _yield_text(agent=agent, text=RATE_LIMITED):
                     yield event
             # Per-segment latency span (SKY-100 follow-up): with the keyword
             # fast path the delegate is the only LLM call on a routed turn -
@@ -600,6 +671,7 @@ class SupervisorService:
                 tenant_id=tenant_id,
                 query=query.strip(),
                 conversation_history=conversation_history,
+                scope=self._permission_scope,
             )
             cached = await self._response_cache.get(cache_key)
             if cached:
@@ -609,17 +681,27 @@ class SupervisorService:
                 return
         self._response_cache_hit = False
         if not self._llm_router.has_providers:
-            for event in _yield_text(agent="supervisor", text=ABSTENTION):
+            for event in _yield_text(
+                agent="supervisor", text=abstention_message(self._granted_permissions)
+            ):
                 yield event
             return
         try:
-            system_tail = ""
+            # The caller-scope line is ALWAYS the last system text, after any
+            # conversation history, so the scope constraint sits immediately
+            # above the user message and previously-injected history cannot
+            # erode it. It grounds the universal persona in the caller's real
+            # grants - the supervisor can never answer "what can I ask?" with
+            # modules the caller cannot read.
+            system_tail_parts = []
             if conversation_history:
-                system_tail = (
+                system_tail_parts.append(
                     f"--- Conversation history ---\n"
                     f"{conversation_history}\n"
                     f"--- End of conversation history ---"
                 )
+            system_tail_parts.append(supervisor_access_tail(self._granted_permissions))
+            system_tail = "\n\n".join(system_tail_parts)
             completion = await self._llm_router.complete(
                 _SUPERVISOR_ANSWER_BUILDER.build(
                     user_prompt=query.strip(),
@@ -634,6 +716,14 @@ class SupervisorService:
             for event in _yield_text(agent="supervisor", text=DEGRADED):
                 yield event
             return
+        except AiRateLimitError as exc:
+            logger.warning(
+                "supervisor.answer_rate_limited",
+                retry_after_seconds=exc.retry_after_seconds,
+            )
+            for event in _yield_text(agent="supervisor", text=RATE_LIMITED):
+                yield event
+            return
         text = (completion.text or "").strip()
         if cache_key is not None and self._response_cache is not None and text:
             await self._response_cache.set(
@@ -641,7 +731,10 @@ class SupervisorService:
                 text,
                 ttl_seconds=self._response_cache_ttl_seconds,
             )
-        for event in _yield_text(agent="supervisor", text=text or ABSTENTION):
+        for event in _yield_text(
+            agent="supervisor",
+            text=text or abstention_message(self._granted_permissions),
+        ):
             yield event
 
     async def _load_conversation_history(
@@ -869,6 +962,30 @@ def _is_greeting(query: str) -> bool:
         if all(word in _GREETING_FILLERS for word in rest):
             return True
     return False
+
+
+# Substrings that mark a question about the caller's own access rather than a
+# module-data request. Runs ONLY on the abstain path (nothing routed to a leaf),
+# so a broad marker like "permission" cannot hijack a module question.
+_PERMISSION_QUESTION_MARKERS = (
+    "which module",
+    "what module",
+    "my permission",
+    "my access",
+    "permission",
+    "restriction",
+    "restricted",
+    "allowed to ask",
+    "am i allowed",
+    "can i ask",
+    "modules can i",
+)
+
+
+def _is_permission_question(query: str) -> bool:
+    """True when the user asks what they can ask about, not for module data."""
+    lowered = " ".join(query.strip().split()).casefold()
+    return any(marker in lowered for marker in _PERMISSION_QUESTION_MARKERS)
 
 
 def _yield_text(*, agent: str, text: str) -> Iterator[TokenEvent]:

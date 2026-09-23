@@ -8,7 +8,9 @@
  *  - a resolved answer is reused inside the TTL;
  *  - a stale answer is served immediately and revalidated in the background;
  *  - a FAILURE is never cached (a blip must not lock the user out);
- *  - `clearModuleAccess()` (sign-out) forces the next read back to the network.
+ *  - `clearModuleAccess()` (sign-out) forces the next read back to the network;
+ *  - an answer resolved for another TENANT is never served (dynamic RBAC is
+ *    tenant-scoped), and the focus-revalidation window is respected.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -17,15 +19,27 @@ import {
     accessibleModules,
     clearModuleAccess,
     getModuleAccess,
+    hasAllPermissions,
     hasPermission,
+    isErpWorldPermission,
     refreshModuleAccess,
     resolveModuleAccess,
+    revalidateModuleAccessIfStale,
 } from "@/lib/access/modules";
 
 const getMyRoles = vi.fn();
 
 vi.mock("@/lib/api/identity-api", () => ({
     getMyRoles: () => getMyRoles(),
+}));
+
+/** Mutable tenant slug so a workspace switch can be simulated. */
+const tenant = { slug: "default" };
+
+vi.mock("@/lib/auth/session-store", () => ({
+    getTenantSlug: () => tenant.slug,
+    getAccessToken: () => null,
+    setAccessToken: () => {},
 }));
 
 const ADMIN = { roles: ["owner"], permissions: ["*"] };
@@ -65,6 +79,25 @@ describe("resolveModuleAccess", () => {
             intelligence: false,
         });
     });
+
+    it("never opens the ERP world for the self-service leave key", () => {
+        // `erp.leave.self` is its own world (/leave): counting it as an ERP key
+        // handed a leave-only user the whole operations app - nav, dashboard,
+        // approvals - where every load then answered 403 instead of their
+        // portal.
+        expect(resolveModuleAccess(["erp.leave.self"])).toEqual({
+            erp: false,
+            agents: false,
+            intelligence: false,
+        });
+        expect(isErpWorldPermission("erp.leave.self")).toBe(false);
+        expect(isErpWorldPermission("erp.leave.request")).toBe(false);
+        // Every other erp.* key still opens the world.
+        expect(isErpWorldPermission("erp.hr.read")).toBe(true);
+        expect(resolveModuleAccess(["erp.leave.self", "erp.hr.read"]).erp).toBe(
+            true,
+        );
+    });
 });
 
 describe("accessibleModules", () => {
@@ -81,18 +114,70 @@ describe("accessibleModules", () => {
 });
 
 describe("hasPermission", () => {
+    it("accepts the exact key or the wildcard", () => {
+        expect(hasPermission(["erp.crm.read"], "erp.crm.read")).toBe(true);
+        expect(hasPermission(["*"], "erp.crm.read")).toBe(true);
+    });
+
+    it("rejects an unrelated key", () => {
+        expect(hasPermission(["erp.crm.read"], "erp.crm.write")).toBe(false);
+    });
+
+    it("keeps every capability distinct - no capability is inferred", () => {
+        const crmRead = ["erp.crm.read"];
+        expect(hasPermission(crmRead, "erp.crm.create")).toBe(false);
+        expect(hasPermission(crmRead, "erp.crm.update")).toBe(false);
+        expect(hasPermission(crmRead, "erp.crm.delete")).toBe(false);
+        expect(hasPermission(["invitations:send"], "erp.crm.read")).toBe(false);
+    });
+});
+
+describe("hasAllPermissions", () => {
+    it("requires every key when none is the wildcard", () => {
+        const aiCrm = ["erp.ai.invoke", "erp.crm.read"];
+        expect(hasAllPermissions(aiCrm, aiCrm)).toBe(true);
+        expect(hasAllPermissions(["erp.crm.read"], aiCrm)).toBe(false);
+        expect(hasAllPermissions(["erp.ai.invoke"], aiCrm)).toBe(false);
+        expect(hasAllPermissions(["erp.ai.invoke", "erp.crm.read", "*"], aiCrm)).toBe(
+            true,
+        );
+    });
+
+    it("accepts the wildcard for the whole set", () => {
+        const narrator = [
+            "erp.ai.invoke",
+            "erp.finance.read",
+            "erp.sales.read",
+            "erp.inventory.read",
+            "erp.crm.read",
+        ];
+        expect(hasAllPermissions(["*"], narrator)).toBe(true);
+    });
+
+    it("treats a single-key list like hasPermission", () => {
+        expect(hasAllPermissions(["erp.reports.read"], ["erp.reports.read"])).toBe(
+            true,
+        );
+        expect(hasAllPermissions(["erp.finance.read"], ["erp.reports.read"])).toBe(
+            false,
+        );
+    });
+});
+
 /* ---------- request cache ---------- */
 
 describe("module access cache", () => {
     beforeEach(() => {
         getMyRoles.mockReset();
         clearModuleAccess();
+        tenant.slug = "default";
         vi.useFakeTimers();
     });
 
     afterEach(() => {
         vi.useRealTimers();
         clearModuleAccess();
+        tenant.slug = "default";
     });
 
     it("coalesces concurrent callers into one request", async () => {
@@ -182,13 +267,56 @@ describe("module access cache", () => {
         expect(getMyRoles).toHaveBeenCalledTimes(2);
         expect(next.permissions).toEqual(["erp.crm.read"]);
     });
-});
-    it("accepts the exact key or the wildcard", () => {
-        expect(hasPermission(["erp.crm.read"], "erp.crm.read")).toBe(true);
-        expect(hasPermission(["*"], "erp.crm.read")).toBe(true);
+
+    it("never serves an answer resolved for another tenant", async () => {
+        tenant.slug = "acme";
+        getMyRoles.mockResolvedValue({
+            roles: ["finance_viewer"],
+            permissions: ["erp.finance.read"],
+        });
+        const first = await getModuleAccess();
+        expect(first.permissions).toEqual(["erp.finance.read"]);
+
+        // Same client session, different workspace: tenant A's permissions must
+        // not render tenant B's nav or pass its guards.
+        tenant.slug = "olympus";
+        getMyRoles.mockResolvedValue({
+            roles: ["invite_viewer"],
+            permissions: ["invitations:send"],
+        });
+        const second = await getModuleAccess();
+
+        expect(second.permissions).toEqual(["invitations:send"]);
+        expect(second.access.erp).toBe(false);
+        expect(getMyRoles).toHaveBeenCalledTimes(2);
     });
 
-    it("rejects an unrelated key", () => {
-        expect(hasPermission(["erp.crm.read"], "erp.crm.write")).toBe(false);
+    it("revalidates on focus only once the answer has aged", async () => {
+        getMyRoles.mockResolvedValue(ADMIN);
+        await getModuleAccess();
+        expect(getMyRoles).toHaveBeenCalledTimes(1);
+
+        // Fresh: a focus event must not cost a request.
+        getMyRoles.mockResolvedValue(VIEWER);
+        const fresh = await revalidateModuleAccessIfStale(60_000);
+        expect(fresh.permissions).toEqual(["*"]);
+        expect(getMyRoles).toHaveBeenCalledTimes(1);
+
+        // Aged past the window: the role change is picked up.
+        vi.advanceTimersByTime(90_000);
+        const aged = await revalidateModuleAccessIfStale(60_000);
+        expect(aged.permissions).toEqual(["erp.crm.read"]);
+        expect(getMyRoles).toHaveBeenCalledTimes(2);
+    });
+
+    it("refetches when a workspace switch leaves no usable answer", async () => {
+        tenant.slug = "acme";
+        getMyRoles.mockResolvedValue(VIEWER);
+        await getModuleAccess();
+
+        tenant.slug = "olympus";
+        const switched = await revalidateModuleAccessIfStale(60 * 60 * 1000);
+        expect(getMyRoles).toHaveBeenCalledTimes(2);
+        expect(switched.status).toBe("ready");
     });
 });

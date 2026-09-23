@@ -6,7 +6,6 @@ import {
     ArrowRight,
     Blocks,
     Radar,
-    RotateCw,
     ShieldCheck,
     UserPlus,
     type LucideIcon,
@@ -97,10 +96,6 @@ function initialsFor(name: string, email: string): string {
 /** Same-origin avatar URL served by /api/auth/avatar/{user_id}/{filename}. */
 function avatarSrc(user: AuthUser | null): string | null {
     return user?.avatarUrl ? `/api/auth/avatar/${user.avatarUrl}` : null;
-}
-
-function replayTour() {
-    window.dispatchEvent(new Event("skyrict:start-tour"));
 }
 
 export default function OverviewClient() {
@@ -196,18 +191,6 @@ export default function OverviewClient() {
                                     </Link>
                                 </Button>
                             ) : null}
-                            <button
-                                type="button"
-                                onClick={replayTour}
-                                title="Replay tour"
-                                aria-label="Replay tour"
-                                className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                            >
-                                <RotateCw
-                                    aria-hidden="true"
-                                    className="size-4"
-                                />
-                            </button>
                         </div>
                     </div>
                 </div>

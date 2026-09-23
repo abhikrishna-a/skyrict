@@ -2,7 +2,6 @@
 // left content side. Restore by uncommenting the two lines below.
 // import { AuthBrandPanel } from "@/components/auth/auth-brand-panel";
 import type { Metadata } from "next";
-import Link from "next/link";
 
 import { Logo } from "@/components/brand/logo";
 
@@ -34,29 +33,6 @@ export default function AuthLayout({
                 <div className="mx-auto my-auto flex w-full max-w-sm flex-col py-10">
                     {children}
                 </div>
-
-                <footer className="mx-auto w-full max-w-sm pb-2 text-center">
-                    <div className="flex items-center justify-center gap-3">
-                        <Link
-                            href="/terms"
-                            className="text-xs text-muted-foreground underline-offset-4 hover:underline"
-                        >
-                            Terms of Service
-                        </Link>
-                        <span
-                            aria-hidden="true"
-                            className="text-muted-foreground/40"
-                        >
-                            ·
-                        </span>
-                        <Link
-                            href="/privacy"
-                            className="text-xs text-muted-foreground underline-offset-4 hover:underline"
-                        >
-                            Privacy Policy
-                        </Link>
-                    </div>
-                </footer>
             </main>
         </div>
     );

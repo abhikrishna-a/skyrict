@@ -1,154 +1,117 @@
 "use client";
 
-import { Spinner } from "@/components/ui/spinner";
+import { useEffect } from "react";
 import Link from "next/link";
-import { ArrowLeft, Lock, ShieldAlert } from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
+import { ShieldAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { useModuleAccess, type ModuleKey } from "@/lib/access/modules";
+import {
+    resolveAccessDecision,
+    type PermissionRequirement,
+} from "@/lib/access/route-permissions";
 
-const MODULE_LABEL: Record<ModuleKey, string> = {
-    erp: "Business Operations",
-    agents: "AI Agents",
-    intelligence: "Market Intelligence",
-};
-
-/** Minimal loading indicator while permissions resolve. */
+/**
+ * No loading UI - intentionally renders nothing.
+ *
+ * The gate's only job is to stop a denied surface from mounting (and firing
+ * its protected API call). While permissions resolve the content slot stays
+ * empty; the page's OWN existing loading state - the route's skeleton or
+ * spinner - is the sole loading UI, and it appears the moment access is
+ * granted. A fallback here would paint a second, generic loading layer on top
+ * of the route's own (and two loading UIs back to back on every hard reload).
+ */
 export function ModuleLoading() {
-    return (
-        <div className="flex min-h-dvh items-center justify-center bg-background">
-            <Spinner className="size-5 text-muted-foreground" />
-        </div>
-    );
+    return null;
 }
 
-function ModuleNotice({
-    title,
-    description,
-    icon: Icon,
-    action,
-}: {
-    title: string;
-    description: string;
-    icon: React.ComponentType<{
-        className?: string;
-        "aria-hidden"?: boolean | "true" | "false";
-    }>;
-    action?: React.ReactNode;
-}) {
+export function ModuleAccessError() {
     return (
         <div className="flex min-h-dvh items-center justify-center bg-background px-6">
             <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
                 <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-muted text-muted-foreground">
-                    <Icon aria-hidden="true" className="size-5" />
+                    <ShieldAlert aria-hidden="true" className="size-5" />
                 </div>
                 <h1 className="mt-5 font-display text-xl font-semibold tracking-tight text-foreground">
-                    {title}
+                    Access check unavailable
                 </h1>
                 <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-                    {description}
+                    Your permissions could not be loaded for this space. Check
+                    your connection and try again.
                 </p>
                 <div className="mt-6">
-                    {action ?? (
-                        <Spinner
-                            aria-hidden="true"
-                            className="mx-auto size-5 text-primary"
-                        />
-                    )}
+                    <Button asChild variant="outline">
+                        <Link href="/">Back to overview</Link>
+                    </Button>
                 </div>
             </div>
         </div>
     );
 }
 
-export function ModuleAccessDenied({ module }: { module: ModuleKey }) {
-    return (
-        <ModuleNotice
-            title={`No access to ${MODULE_LABEL[module]}`}
-            description="Your roles don't include permission for this space. Ask a workspace owner to update your role or sign in with an account that has access."
-            icon={Lock}
-            action={
-                <Button asChild>
-                    <Link href="/">
-                        <ArrowLeft aria-hidden="true" className="size-4" />
-                        Back to overview
-                    </Link>
-                </Button>
-            }
-        />
-    );
-}
-
-const PERMISSION_LABEL: Record<string, string> = {
-    "erp.hr.read": "HR",
-    "erp.hr.ai.read": "HR AI Alerts",
-    "erp.payroll.read": "Payroll",
-    "erp.payroll.approve": "Payroll Approvals",
-    "erp.payroll.ai.read": "Payroll Automation",
-    "erp.hr.ai.planning": "HR Planning",
-};
-
-/** Blocked state for a user who can reach a module but not a specific area. */
-export function ModulePermissionDenied({ permission }: { permission: string }) {
-    const label = PERMISSION_LABEL[permission] ?? "this area";
-    return (
-        <ModuleNotice
-            title={`No access to ${label}`}
-            description="Your roles don't include permission for this area. Ask a workspace owner to update your role or sign in with an account that has access."
-            icon={Lock}
-            action={
-                <Button asChild>
-                    <Link href="/erp">
-                        <ArrowLeft aria-hidden="true" className="size-4" />
-                        Back to overview
-                    </Link>
-                </Button>
-            }
-        />
-    );
-}
-
-export function ModuleAccessError({ module }: { module: ModuleKey }) {
-    return (
-        <ModuleNotice
-            title="Couldn't verify access"
-            description={`We couldn't load your permissions for ${MODULE_LABEL[module]}. Check your connection and try again.`}
-            icon={ShieldAlert}
-            action={
-                <Button asChild variant="outline">
-                    <Link href="/">Back to overview</Link>
-                </Button>
-            }
-        />
-    );
-}
-
 /**
- * Wraps a module world with the access check. Renders a themed skeleton while
- * permissions load, then either the module's chrome or an access-denied panel.
- * An optional `permission` narrows the check to a specific key (e.g. a
- * sub-module page inside an accessible world); when absent, only the module
- * gate applies.
+ * Wraps a protected surface with the access check. Renders the loading state
+ * while permissions resolve, then either the content or a silent redirect.
+ *
+ * Two gates apply, both resolved by the ONE decision helper:
+ * - Module gate (when `module` is passed): the user must be able to enter the
+ *   world (`access[module]`). Workspace routes pass no module.
+ * - Permission gate: when `permission` is passed that exact key is required;
+ *   otherwise the required key is resolved from the current pathname via
+ *   `resolveRoutePermission`, and only the module gate applies when the route
+ *   lists no key.
+ *
+ * Authentication is checked before permissions: the boundary renders nothing
+ * (a neutral spinner) until the effective permission set is resolved, so a page
+ * never mounts, fetches its data and then surfaces a backend 403.
+ *
+ * Denial is handled with a silent client-side redirect to the first route the
+ * user can actually open (the module home, the leave portal, or the workspace
+ * overview). A denied surface never renders and never shows a denial notice, so
+ * its existence is not revealed to the user. The error card is reserved for a
+ * failed access check, which discloses nothing about the surface.
  */
 export function ModuleAccessBoundary({
     module,
     permission,
     children,
 }: {
-    module: ModuleKey;
-    permission?: string;
+    /** World gate. Omit for workspace/portal routes (route gate only). */
+    module?: ModuleKey;
+    /**
+     * Explicit permission requirement (single key, all-of array, or
+     * `{ anyOf }`). Omit to resolve it from the current pathname via
+     * `resolveRoutePermission` instead.
+     */
+    permission?: PermissionRequirement;
     children: React.ReactNode;
 }) {
     const { status, access, permissions } = useModuleAccess();
+    const pathname = usePathname();
+    const router = useRouter();
 
-    if (status === "loading") return <ModuleLoading />;
-    if (status === "error") return <ModuleAccessError module={module} />;
-    if (!access[module]) return <ModuleAccessDenied module={module} />;
-    if (
-        permission &&
-        !(permissions.includes("*") || permissions.includes(permission))
-    ) {
-        return <ModulePermissionDenied permission={permission} />;
+    const decision = resolveAccessDecision({
+        status,
+        access,
+        permissions,
+        module,
+        required: permission,
+        pathname,
+    });
+    const redirect = decision.state === "denied" ? decision.redirect : null;
+
+    useEffect(() => {
+        if (redirect) void router.replace(redirect);
+    }, [redirect, router]);
+
+    if (decision.state === "loading") return <ModuleLoading />;
+    if (decision.state === "error") return <ModuleAccessError />;
+    if (decision.state === "denied") {
+        // Denied surfaces never render their own content shape: show the
+        // neutral workspace skeleton while the silent redirect runs, so the
+        // map-out reveals nothing about the surface being denied.
+        return <ModuleLoading />;
     }
     return <>{children}</>;
 }

@@ -15,28 +15,113 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-const quickLinks: {
+import { hasPermission, useModuleAccess } from "@/lib/access/modules";
+
+export type ModuleQuickLink = {
   href: string;
   title: string;
   description: string;
   icon: LucideIcon;
-}[] = [
-  { href: "/erp/crm/overview", title: "CRM", description: "Leads, pipelines, and customers.", icon: Contact },
-  { href: "/erp/orders", title: "Orders", description: "Sales orders and the fulfilment flow.", icon: ShoppingCart },
-  { href: "/erp/inventory", title: "Inventory", description: "Stock and warehouses.", icon: Package },
-  { href: "/erp/finance", title: "Finance", description: "Cash flow and ledgers.", icon: Wallet },
-  { href: "/erp/hr", title: "HR", description: "People and the team.", icon: Users },
-  { href: "/erp/documents", title: "Documents", description: "Central document store with AI extraction.", icon: FileText },
-  { href: "/erp/payroll", title: "Payroll", description: "Runs, compensation, and pay rules.", icon: Receipt },
-  { href: "/erp/approvals", title: "Approvals", description: "AI-routed approvals inbox.", icon: Inbox },
-  { href: "/erp/reports", title: "Reports", description: "Dashboards and exports.", icon: BarChart3 },
+  /**
+   * Module read key required to see the link, or undefined for always-visible
+   * hubs. The Approvals inbox aggregates tasks across modules and is gated by
+   * the shell's module check alone (same rule as the route map), so it has no
+   * key of its own.
+   */
+  permission?: string;
+};
+
+const quickLinks: ModuleQuickLink[] = [
+  {
+    href: "/erp/crm/overview",
+    title: "CRM",
+    description: "Leads, pipelines, and customers.",
+    icon: Contact,
+    permission: "erp.crm.read",
+  },
+  {
+    href: "/erp/orders",
+    title: "Orders",
+    description: "Sales orders and the fulfilment flow.",
+    icon: ShoppingCart,
+    permission: "erp.sales.read",
+  },
+  {
+    href: "/erp/inventory",
+    title: "Inventory",
+    description: "Stock and warehouses.",
+    icon: Package,
+    permission: "erp.inventory.read",
+  },
+  {
+    href: "/erp/finance",
+    title: "Finance",
+    description: "Cash flow and ledgers.",
+    icon: Wallet,
+    permission: "erp.finance.read",
+  },
+  {
+    href: "/erp/hr",
+    title: "HR",
+    description: "People and the team.",
+    icon: Users,
+    permission: "erp.hr.read",
+  },
+  {
+    href: "/erp/documents",
+    title: "Documents",
+    description: "Central document store with AI extraction.",
+    icon: FileText,
+    permission: "erp.documents.read",
+  },
+  {
+    href: "/erp/payroll",
+    title: "Payroll",
+    description: "Runs, compensation, and pay rules.",
+    icon: Receipt,
+    permission: "erp.payroll.read",
+  },
+  {
+    href: "/erp/approvals",
+    title: "Approvals",
+    description: "AI-routed approvals inbox.",
+    icon: Inbox,
+  },
+  {
+    href: "/erp/reports",
+    title: "Reports",
+    description: "Dashboards and exports.",
+    icon: BarChart3,
+    permission: "erp.reports.read",
+  },
 ];
+
+/**
+ * Quick links the user may actually open. Links carry their module's read key
+ * (each target route is gated by the same key in the route map); the wildcard
+ * keeps everything. Pure so the gate is unit-testable without a render.
+ */
+export function filterQuickLinksByPermissions(
+  links: ModuleQuickLink[],
+  grantedPermissions: string[],
+): ModuleQuickLink[] {
+  return links.filter(
+    (link) => !link.permission || hasPermission(grantedPermissions, link.permission),
+  );
+}
 
 /** Module quick-link cards rendered on the ERP overview page. */
 export function ModuleQuickLinks() {
+  const { status, permissions } = useModuleAccess();
+
+  // Fail closed while access is resolving and for a fully-denied world.
+  if (status !== "ready") return null;
+  const visible = filterQuickLinksByPermissions(quickLinks, permissions);
+  if (visible.length === 0) return null;
+
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {quickLinks.map((link) => (
+      {visible.map((link) => (
         <Link
           key={link.href}
           href={link.href}

@@ -107,6 +107,21 @@ class FakeMembershipRepo:
         self.updated.append(membership)
         return membership
 
+    async def renew_invited(
+        self,
+        membership_id: str | uuid.UUID,
+        *,
+        role_id: str | uuid.UUID,
+        invited_by_user_id: str | uuid.UUID,
+        invited_at: datetime,
+    ) -> Membership:
+        membership = self.memberships[uuid.UUID(str(membership_id))]
+        membership.role_id = uuid.UUID(str(role_id))
+        membership.invited_by_user_id = uuid.UUID(str(invited_by_user_id))
+        membership.invited_at = invited_at
+        self.updated.append(membership)
+        return membership
+
 
 @pytest.fixture
 def repo() -> FakeMembershipRepo:
@@ -162,6 +177,47 @@ class TestCreateInvited:
         with pytest.raises(ValidationError):
             await _invite(service, email="bob@acme.io", tenant_id=tenant_id)
         assert len(repo.created) == 1
+
+
+class TestRenewInvited:
+    async def test_renews_invited_reservation_in_place(
+        self,
+        service: MembershipService,
+        repo: FakeMembershipRepo,
+        tenant_id: uuid.UUID,
+    ) -> None:
+        role_id, invited_by = uuid.uuid4(), uuid.uuid4()
+        membership = await _invite(service, email="bob@acme.io", tenant_id=tenant_id)
+        original_id = membership.id
+
+        renewed = await service.renew_invited(
+            membership_id=membership.id,
+            role_id=role_id,
+            invited_by_user_id=invited_by,
+        )
+
+        assert renewed.id == original_id
+        assert renewed.status is MembershipStatus.INVITED
+        assert renewed.role_id == role_id
+        assert renewed.invited_by_user_id == invited_by
+        assert renewed.invited_at is not None
+        assert len(repo.updated) == 1
+
+    async def test_active_membership_cannot_be_renewed_as_invite(
+        self,
+        service: MembershipService,
+        repo: FakeMembershipRepo,
+        tenant_id: uuid.UUID,
+    ) -> None:
+        membership = await _invite(service, email="bob@acme.io", tenant_id=tenant_id)
+        await service.activate(membership_id=membership.id, user_id=uuid.uuid4())
+
+        with pytest.raises(ValidationError, match="not pending"):
+            await service.renew_invited(
+                membership_id=membership.id,
+                role_id=uuid.uuid4(),
+                invited_by_user_id=uuid.uuid4(),
+            )
 
 
 class TestActivate:

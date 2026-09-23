@@ -16,8 +16,8 @@ import time
 import uuid
 from typing import TYPE_CHECKING, Any, cast
 
+import jwt
 import pytest
-from jose import jwt
 from sqlalchemy import select, text
 
 from core.core.config import settings

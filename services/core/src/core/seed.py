@@ -590,13 +590,16 @@ async def sync_rbac_from_identity() -> None:
     grants that ``require_permission`` resolves through.
 
     Idempotent: safe to re-run on every startup. Core's role IDs are never
-    overwritten (preserving FK references). Missing grants are added;
+    overwritten (preserving FK references). Role permission arrays are
+    REPLACED from identity (the authoritative catalog) on every boot, so
+    edits - including removals - propagate; missing grants are added and
     existing ones are left untouched.
     """
     async with async_session_factory() as session:
         # Step 1: Sync role permissions from identity's roles into core_roles.
-        # On conflict (same tenant + name), merge permissions and update
-        # is_system_role. Core's own role `id` is NEVER overwritten - it is
+        # On conflict (same tenant + name), REPLACE permissions (never merge)
+        # so permission removals propagate too - identity is authoritative for
+        # role definitions. Core's own role `id` is NEVER overwritten - it is
         # the PK that core_user_roles FKs reference, so replacing it would
         # break existing grants.
         await session.execute(
@@ -605,8 +608,7 @@ async def sync_rbac_from_identity() -> None:
                 "SELECT ir.tenant_id, ir.id, ir.name, ir.permissions, ir.is_system_role "
                 "FROM roles ir "
                 "ON CONFLICT (tenant_id, name) DO UPDATE SET "
-                "permissions = (SELECT array_agg(DISTINCT p) FROM unnest("
-                "core_roles.permissions || EXCLUDED.permissions) AS p), "
+                "permissions = EXCLUDED.permissions, "
                 "is_system_role = EXCLUDED.is_system_role, updated_at = now()"
             )
         )

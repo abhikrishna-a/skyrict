@@ -5,8 +5,8 @@ from __future__ import annotations
 import time
 import uuid
 
+import jwt
 import pytest
-from jose import jwt
 
 from core.core.config import settings
 from core.core.security import cross_check_jwt_tenant, verify_jwt
@@ -77,9 +77,10 @@ class TestVerifyJwt:
 
     def test_hmac_algorithm_rejected(self) -> None:
         # Algorithm-confusion attempt: HMAC-signed with a plain shared secret.
-        # python-jose refuses to use an asymmetric PEM as an HMAC secret, so a
-        # raw secret string is the realistic confusion vector; verify_jwt must
-        # reject it at the header whitelist before any key is consulted.
+        # (An attacker can also use the RSA public PEM as the HMAC secret -
+        # PyJWT treats arbitrary bytes as a valid HMAC key - but a plain
+        # secret string is the simplest realistic vector here.) verify_jwt
+        # must reject it at the header whitelist before any key is consulted.
         now = int(time.time())
         payload = {
             "sub": _SUB,
@@ -91,7 +92,7 @@ class TestVerifyJwt:
             "exp": now + 300,
             "type": "access",
         }
-        token = jwt.encode(payload, "compromised-shared-secret", algorithm="HS256")
+        token = jwt.encode(payload, "compromised-shared-secret-0123456789", algorithm="HS256")
         with pytest.raises(TokenInvalidError):
             verify_jwt(token)
 

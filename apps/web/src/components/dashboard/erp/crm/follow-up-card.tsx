@@ -83,7 +83,7 @@ export function FollowUpCard({ item, onAction }: FollowUpCardProps) {
                 err instanceof ApiError
                     ? err.message
                     : "Could not apply follow-up.";
-            // eslint-disable-next-line no-alert -- non-critical user feedback
+            // Non-critical user feedback; alert() is intentional here.
             alert(msg);
         } finally {
             setBusy(false);

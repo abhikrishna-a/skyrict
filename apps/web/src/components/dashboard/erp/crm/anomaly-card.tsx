@@ -82,7 +82,7 @@ export function AnomalyCard({ item, onAction }: AnomalyCardProps) {
                 err instanceof ApiError
                     ? err.message
                     : "Could not update the anomaly.";
-            // eslint-disable-next-line no-alert -- non-critical user feedback
+            // Non-critical user feedback; alert() is intentional here.
             alert(msg);
         } finally {
             setBusy(null);

@@ -45,8 +45,9 @@ const orgSchema = z.object({
     phoneNumber: z
         .string()
         .trim()
+        .regex(/^[0-9]+$/, "Numbers only")
         .min(7, "Enter a valid phone number")
-        .regex(/^[0-9+\-() ]+$/, "Numbers, +, -, and spaces only"),
+        .max(10, "Enter a valid phone number"),
     addressCountry: z.string().min(1, "Select a country"),
     addressLine1: z.string().trim().min(2, "Enter your street address"),
     addressLine2: z.string().trim().optional(),
@@ -300,7 +301,7 @@ function OrganizationStep({
             interval: selectedInterval,
             currency: selectedCurrency,
         });
-        router.push(`/register/billing?${next.toString()}`);
+        router.push(`/signup/billing?${next.toString()}`);
     }
 
     async function onSubmit(values: OrganizationValues) {
@@ -524,10 +525,18 @@ function OrganizationStep({
                         label="Phone number"
                         hideLabel
                         type="tel"
+                        inputMode="numeric"
                         autoComplete="tel"
+                        maxLength={10}
                         placeholder="10-digit phone number"
                         error={errors.phoneNumber?.message}
-                        {...register("phoneNumber")}
+                        {...register("phoneNumber", {
+                            onChange: (event) => {
+                                event.target.value = event.target.value
+                                    .replace(/\D/g, "")
+                                    .slice(0, 10);
+                            },
+                        })}
                     />
                 </div>
             </div>

@@ -32,16 +32,21 @@ export interface WidgetDefinition {
     maxCols: 4;
     /** Grouping for the customize panel. */
     group: "overview" | "modules" | "insights";
-    /** Permission keys required to see this widget. Empty = visible to all. */
+    /**
+     * Permission keys required to see this widget. ALL keys must be granted
+     * (all-of semantics, mirroring the backend's `require_all_permissions`);
+     * empty/absent = visible to all. The Business Pulse digest requires
+     * `erp.ai.invoke` plus every module read the narrator aggregates.
+     */
     permissions?: string[];
 }
 
 /**
  * Canonical list of available widgets. Order here prioritizes:
  * 1. Attention & Exceptions strip
- * 2. Cross-Module KPI Snapshot (Finance & Operations clusters)
- * 3. Module Quick Links
- * 4. Collapsible Intelligence Digest
+ * 2. Business Pulse (daily brief)
+ * 3. Cross-Module KPI Snapshot (Finance & Operations clusters)
+ * 4. Module Quick Links
  */
 export const WIDGET_REGISTRY: WidgetDefinition[] = [
     {
@@ -77,13 +82,24 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
     },
     {
         id: "ai_digest",
-        title: "Intelligence Digest",
-        description: "Daily cross-module AI summary of key signals.",
+        title: "Business Pulse",
+        description:
+            "Daily cross-module summary of key signals across the business.",
         component: DigestCard,
         defaultCols: 4,
         minCols: 2,
         maxCols: 4,
         group: "insights",
+        // The narrator digest aggregates finance, sales, inventory and CRM data
+        // through the AI proxy, so it needs erp.ai.invoke AND every module read
+        // (backend: `require_all_permissions` on the /ai/narrator/digest route).
+        permissions: [
+            "erp.ai.invoke",
+            "erp.finance.read",
+            "erp.sales.read",
+            "erp.inventory.read",
+            "erp.crm.read",
+        ],
     },
     {
         id: "erp_overview",
@@ -117,10 +133,10 @@ export function getWidget(id: string): WidgetDefinition | undefined {
 /** Default ERP dashboard layout in priority hierarchy order. */
 const DEFAULT_PRIMARY_WIDGET_IDS = [
     "attention_strip",
+    "ai_digest",
     "cross_module_kpis",
     "reports_kpis",
     "module_quick_links",
-    "ai_digest",
 ];
 
 /** Return the default layout (prioritized default widgets, order and sizes). */
@@ -141,7 +157,7 @@ export function getDefaultLayout(): {
     });
 }
 
-/** Filter widgets by a set of permission keys. */
+/** Filter widgets by a set of granted permission keys (all-of per widget). */
 export function filterWidgetsByPermissions(
     layout: {
         id: string;
@@ -155,6 +171,12 @@ export function filterWidgetsByPermissions(
         const widget = getWidget(item.id);
         if (!widget) return false;
         if (!widget.permissions || widget.permissions.length === 0) return true;
-        return widget.permissions.some((p) => grantedPermissions.includes(p));
+        // Owners hold the "*" wildcard and must keep every permission-scoped
+        // widget; otherwise EVERY required key must be granted (all-of - the
+        // Business Pulse digest lists five keys, one per narrator source).
+        return (
+            grantedPermissions.includes("*") ||
+            widget.permissions.every((p) => grantedPermissions.includes(p))
+        );
     });
 }

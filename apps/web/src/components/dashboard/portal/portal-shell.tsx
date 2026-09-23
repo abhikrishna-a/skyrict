@@ -4,6 +4,7 @@ import { LogOut } from "lucide-react";
 
 import { Logo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/button";
+import { ModuleAccessBoundary } from "@/components/dashboard/shared/module-access-boundary";
 import { useSession } from "@/lib/auth/session";
 
 /**
@@ -37,7 +38,11 @@ export function PortalShell({ children }: { children: React.ReactNode }) {
                 </div>
             </header>
             <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-8">
-                {children}
+                {/* The portal is its own world: `/leave` is gated on
+                    `erp.leave.self` through the route map, so a member without
+                    the key never mounts the portal (and never reads the raw
+                    403 the portal API would answer with). */}
+                <ModuleAccessBoundary>{children}</ModuleAccessBoundary>
                 <p className="sr-only">{`Signed in as ${user?.email ?? "you"}`}</p>
             </main>
         </div>

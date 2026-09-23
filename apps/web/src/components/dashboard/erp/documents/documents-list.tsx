@@ -1,10 +1,10 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
     Download,
     FileText,
-    Sparkles,
     Trash2,
 } from "lucide-react";
 import Link from "next/link";
@@ -390,7 +390,7 @@ export function DocumentsList() {
                                                             }
                                                             aria-label={`Confirm AI tags for ${document.filename}`}
                                                         >
-                                                            <Sparkles aria-hidden="true" />
+                                                            <AiGlyph aria-hidden="true" />
                                                         </Button>
                                                     ) : null}
                                                     <Button

@@ -29,8 +29,12 @@ PERM_AI_INVOKE = "erp.ai.invoke"
 PERM_INVENTORY_READ = "erp.inventory.read"
 PERM_INVENTORY_AI_APPROVE = "erp.inventory.ai.approve"
 PERM_FINANCE_WRITE = "erp.finance.write"
+PERM_FINANCE_READ = "erp.finance.read"
 PERM_CRM_READ = "erp.crm.read"
 PERM_CRM_COACHING_APPROVE = "erp.crm.coaching.approve"
+PERM_HR_AI_READ = "erp.hr.ai.read"
+PERM_AI_COACHING_READ = "erp.ai.coaching.read"
+PERM_AI_GUARDIAN_READ = "erp.ai.guardian.read"
 
 
 def grants_permission(granted: Iterable[str], required: str) -> bool:

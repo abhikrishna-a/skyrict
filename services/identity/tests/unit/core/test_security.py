@@ -14,10 +14,10 @@ import hmac
 import json
 from datetime import UTC, datetime, timedelta
 
+import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-from jose import jwt as jose_jwt
 
 from identity.core.config import settings
 from identity.core.exceptions import StartupError
@@ -54,8 +54,8 @@ def _valid_claims(**overrides) -> dict:
 
 
 def _sign(payload: dict, private_key_pem: str, algorithm: str = "RS256") -> str:
-    """Sign claims with python-jose - used to build adversarial tokens."""
-    return jose_jwt.encode(payload, private_key_pem, algorithm=algorithm)
+    """Sign claims with PyJWT - used to build adversarial tokens."""
+    return jwt.encode(payload, private_key_pem, algorithm=algorithm)
 
 
 def _generate_keypair() -> tuple[str, str]:
@@ -83,7 +83,7 @@ def _b64url(data: bytes) -> str:
 
 
 def _bare_token(header: dict, payload: dict, signature: str = "") -> str:
-    """Manually assemble a token without python-jose (for alg:none forgeries)."""
+    """Manually assemble a token without a JWT library (for alg:none forgeries)."""
     h = _b64url(json.dumps(header).encode())
     p = _b64url(json.dumps(payload).encode())
     return f"{h}.{p}.{signature}"
@@ -92,10 +92,10 @@ def _bare_token(header: dict, payload: dict, signature: str = "") -> str:
 def _hmac_token(payload: dict, secret: str) -> str:
     """Manually sign an HS256 token with an HMAC secret.
 
-    python-jose's cryptography backend refuses to construct an HMAC key from an
-    asymmetric PEM, so this builds the token directly - reproducing the real
-    algorithm-confusion attack where the attacker uses the public key as the
-    HMAC secret.
+    Reproduces the classic algorithm-confusion attack where the attacker uses
+    the RSA PUBLIC key PEM as the HMAC secret. Assembled by hand so the
+    fixture never depends on how a JWT library derives HMAC keys; the verifier
+    must reject it on the algorithm whitelist before any key is consulted.
     """
     header = {"alg": "HS256", "typ": "JWT"}
     signing_input = (

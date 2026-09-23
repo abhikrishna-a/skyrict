@@ -1,4 +1,5 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useState } from "react";
@@ -7,7 +8,6 @@ import {
     Clock,
     Inbox,
     RefreshCw,
-    Sparkles,
     XCircle,
 } from "lucide-react";
 
@@ -95,7 +95,7 @@ function SuggestionChip({ suggestion }: { suggestion: ApprovalSuggestion }) {
     if (!suggestion.recommendation) return null;
     return (
         <span className="inline-flex max-w-full items-center gap-1.5 rounded-full border border-primary/30 bg-primary/5 px-2 py-0.5 text-xs font-medium text-primary">
-            <Sparkles aria-hidden="true" className="size-3 shrink-0" />
+            <AiGlyph aria-hidden="true" className="size-3 shrink-0" />
             <span className="truncate">{suggestion.recommendation}</span>
         </span>
     );
@@ -212,7 +212,7 @@ function ReviewDialog({ instanceId, onClose, onDecided }: ReviewDialogProps) {
                         {detail.instance.suggestion ? (
                             <div className="rounded-xl border border-primary/30 bg-primary/5 p-4">
                                 <div className="flex items-center gap-1.5 text-sm font-medium text-primary">
-                                    <Sparkles
+                                    <AiGlyph
                                         aria-hidden="true"
                                         className="size-4"
                                     />

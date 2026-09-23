@@ -2,9 +2,11 @@
 
 Covers the event-driven core-RBAC provisioning path (identity -> core): the
 idempotent ``apply_role_grants`` upsert, the ``provision_tenant_rbac`` entry
-point, the ``handle_event`` consumer dispatch for both
-``identity.tenant.provisioned`` and ``identity.rbac.role_granted`` envelopes,
-and that ``RbacRepository`` resolves the provisioned grants at request time.
+point, the ``handle_event`` consumer dispatch for the
+``identity.tenant.provisioned``, ``identity.rbac.role_granted``, and
+``identity.rbac.role_updated`` envelopes, the boot
+``sync_rbac_from_identity`` replace semantics, and that ``RbacRepository``
+resolves the provisioned grants at request time.
 """
 
 from __future__ import annotations
@@ -22,7 +24,12 @@ from core.events.consumers.rbac import apply_role_grants, provision_tenant_rbac
 from core.models.core_role import CoreRoleModel
 from core.models.core_user_role import CoreUserRoleModel
 from core.models.tenant import TenantModel
-from skyrict_events.schemas import RbacRoleGranted, RoleGrant, TenantProvisioned
+from skyrict_events.schemas import (
+    RbacRoleGranted,
+    RbacRoleUpdated,
+    RoleGrant,
+    TenantProvisioned,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -224,6 +231,145 @@ class TestHandleEvent:
         assert role is not None
         assert role.is_system_role is False
 
+    async def test_rbac_role_updated_envelope(self, tenant: str) -> None:
+        """Definition-only envelope (no user grant) upserts + replaces perms."""
+        role_id = str(uuid.uuid4())
+        event = RbacRoleUpdated(
+            tenant_id=tenant,
+            role=RoleGrant(
+                role_id=role_id,
+                role_name="ops_custom",
+                permissions=["erp.finance.read", "erp.ai.invoke"],
+                is_system_role=False,
+            ),
+        )
+
+        result = await handle_event(event.to_dict())
+
+        assert result is not None
+        assert result.roles_created == 1
+        assert result.grants_created == 0
+        async with async_session_factory() as session:
+            role = await session.get(CoreRoleModel, (uuid.UUID(tenant), uuid.UUID(role_id)))
+        assert role is not None
+        assert role.permissions == ["erp.finance.read", "erp.ai.invoke"]
+        assert role.is_system_role is False
+
+        # A newer definition REPLACES: the removed key stops being enforced.
+        updated = RbacRoleUpdated(
+            tenant_id=tenant,
+            role=RoleGrant(
+                role_id=role_id,
+                role_name="ops_custom",
+                permissions=["erp.ai.invoke"],
+                is_system_role=False,
+            ),
+        )
+        result = await handle_event(updated.to_dict())
+
+        assert result is not None
+        assert result.roles_updated == 1
+        async with async_session_factory() as session:
+            role = await session.get(CoreRoleModel, (uuid.UUID(tenant), uuid.UUID(role_id)))
+        assert role is not None
+        assert role.permissions == ["erp.ai.invoke"]
+
     async def test_unknown_event_type_is_ignored(self) -> None:
         result = await handle_event({"event_type": "identity.user.created", "user_id": "u-1"})
         assert result is None
+
+
+class TestSyncRbacFromIdentityReplace:
+    """Boot sync must REPLACE role permissions, never union (revocations too)."""
+
+    async def test_role_permission_edit_propagates(self, tenant: str) -> None:
+        from core.seed import sync_rbac_from_identity
+
+        role_id = uuid.uuid4()
+        async with async_session_factory() as session:
+            # identity's roles row (authoritative) reflects the current edit
+            await session.execute(
+                text(
+                    "INSERT INTO roles (id, tenant_id, name, permissions, is_system_role) "
+                    "VALUES (:rid, :tid, :rname, :perms, false)"
+                ),
+                {
+                    "rid": role_id,
+                    "tid": uuid.UUID(tenant),
+                    "rname": "ops_custom",
+                    "perms": ["erp.finance.read", "erp.ai.invoke"],
+                },
+            )
+            # core projection is STALE - mirrored before the AI keys were added
+            await session.execute(
+                text(
+                    "INSERT INTO core_roles (tenant_id, id, name, permissions, is_system_role) "
+                    "VALUES (:tid, :rid, :rname, :stale, false)"
+                ),
+                {
+                    "tid": uuid.UUID(tenant),
+                    "rid": role_id,
+                    "rname": "ops_custom",
+                    "stale": ["erp.finance.read"],
+                },
+            )
+            await session.commit()
+
+        await sync_rbac_from_identity()
+
+        async with async_session_factory() as session:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT permissions FROM core_roles "
+                        "WHERE tenant_id = :tid AND name = :rname"
+                    ),
+                    {"tid": uuid.UUID(tenant), "rname": "ops_custom"},
+                )
+            ).scalar_one()
+        assert sorted(row) == ["erp.ai.invoke", "erp.finance.read"]
+
+    async def test_revoked_permission_removed_from_core(self, tenant: str) -> None:
+        from core.seed import sync_rbac_from_identity
+
+        role_id = uuid.uuid4()
+        async with async_session_factory() as session:
+            await session.execute(
+                text(
+                    "INSERT INTO roles (id, tenant_id, name, permissions, is_system_role) "
+                    "VALUES (:rid, :tid, :rname, :perms, false)"
+                ),
+                {
+                    "rid": role_id,
+                    "tid": uuid.UUID(tenant),
+                    "rname": "ops_custom",
+                    "perms": ["erp.finance.read"],  # erp.ai.invoke was REVOKED
+                },
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO core_roles (tenant_id, id, name, permissions, is_system_role) "
+                    "VALUES (:tid, :rid, :rname, :stale, false)"
+                ),
+                {
+                    "tid": uuid.UUID(tenant),
+                    "rid": role_id,
+                    "rname": "ops_custom",
+                    "stale": ["erp.ai.invoke", "erp.finance.read"],
+                },
+            )
+            await session.commit()
+
+        await sync_rbac_from_identity()
+
+        async with async_session_factory() as session:
+            row = (
+                await session.execute(
+                    text(
+                        "SELECT permissions FROM core_roles "
+                        "WHERE tenant_id = :tid AND name = :rname"
+                    ),
+                    {"tid": uuid.UUID(tenant), "rname": "ops_custom"},
+                )
+            ).scalar_one()
+        assert sorted(row) == ["erp.finance.read"]

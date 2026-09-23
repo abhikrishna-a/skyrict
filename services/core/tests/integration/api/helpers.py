@@ -16,7 +16,7 @@ import time
 import uuid
 from typing import TYPE_CHECKING, Any, cast
 
-from jose import jwt
+import jwt
 
 from core.core.config import settings
 

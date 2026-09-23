@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu } from "lucide-react";
@@ -9,6 +9,7 @@ import { IntelligenceCountrySelect } from "@/components/dashboard/intelligence/i
 import { IntelligenceMenu } from "@/components/dashboard/intelligence/intelligence-menu";
 import { ModuleAccessBoundary } from "@/components/dashboard/shared/module-access-boundary";
 import type { AuthUser } from "@/lib/api/auth-api";
+import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 import { useSession } from "@/lib/auth/session";
 import { normalizeDashboardPath } from "@/lib/dashboard-path";
 import { cn } from "@/lib/utils";
@@ -17,6 +18,9 @@ interface IntelligenceNavItem {
     href: string;
     label: string;
     exact?: boolean;
+    /** Key this row needs. The GMIE world is one key today, but a row must
+     *  still declare it so nav and the route map stay metadata-driven. */
+    permission: string;
 }
 
 /**
@@ -26,10 +30,27 @@ interface IntelligenceNavItem {
  * the utility routes (helpdesk, feedback, and more).
  */
 const NAV_ITEMS: IntelligenceNavItem[] = [
-    { href: "/intelligence", label: "Home", exact: true },
-    { href: "/intelligence/explore", label: "Explore" },
-    { href: "/intelligence/trending", label: "Trending" },
-    { href: "/intelligence/market", label: "Market" },
+    {
+        href: "/intelligence",
+        label: "Home",
+        exact: true,
+        permission: "intelligence:read",
+    },
+    {
+        href: "/intelligence/explore",
+        label: "Explore",
+        permission: "intelligence:read",
+    },
+    {
+        href: "/intelligence/trending",
+        label: "Trending",
+        permission: "intelligence:read",
+    },
+    {
+        href: "/intelligence/market",
+        label: "Market",
+        permission: "intelligence:read",
+    },
 ];
 
 /**
@@ -61,10 +82,24 @@ function avatarSrc(user: AuthUser | null): string | null {
 export function IntelligenceShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const { user } = useSession();
+    const { status, permissions } = useModuleAccess();
     const [menuOpen, setMenuOpen] = useState(false);
 
+    // Fail closed: the nav is built from permission metadata, so while the
+    // effective permission set is unresolved NOTHING renders - never the full
+    // module list for a user who holds none of its keys.
+    const navItems = useMemo(
+        () =>
+            status === "ready"
+                ? NAV_ITEMS.filter((item) =>
+                      hasPermission(permissions, item.permission),
+                  )
+                : [],
+        [status, permissions],
+    );
+
     return (
-        <ModuleAccessBoundary module="intelligence">
+        <>
             <div
                 className="flex h-dvh flex-col overflow-hidden bg-background"
                 data-theme-scope
@@ -96,7 +131,7 @@ export function IntelligenceShell({ children }: { children: React.ReactNode }) {
                             aria-label="Market intelligence"
                             className="flex min-w-0 items-center gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
                         >
-                            {NAV_ITEMS.map((item) => {
+                            {navItems.map((item) => {
                                 const active = isActive(pathname, item);
                                 return (
                                     <Link
@@ -149,9 +184,11 @@ export function IntelligenceShell({ children }: { children: React.ReactNode }) {
                 </header>
 
                 <main className="flex-1 overflow-y-auto">
-                    <div className="mx-auto w-full max-w-5xl px-4 py-8 lg:px-6">
-                        {children}
-                    </div>
+                    <ModuleAccessBoundary module="intelligence">
+                        <div className="mx-auto w-full max-w-5xl px-4 py-8 lg:px-6">
+                            {children}
+                        </div>
+                    </ModuleAccessBoundary>
                 </main>
             </div>
 
@@ -159,6 +196,6 @@ export function IntelligenceShell({ children }: { children: React.ReactNode }) {
                 open={menuOpen}
                 onClose={() => setMenuOpen(false)}
             />
-        </ModuleAccessBoundary>
+        </>
     );
 }

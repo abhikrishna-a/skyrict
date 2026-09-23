@@ -1,4 +1,5 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { Spinner } from "@/components/ui/spinner";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -8,7 +9,6 @@ import {
     Clock,
     FileText,
     RefreshCw,
-    Sparkles,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -230,7 +230,7 @@ export function DocumentsOverview() {
                                             <div className="flex flex-wrap items-center gap-1">
                                                 {doc.aiTags.length > 0 ? (
                                                     <>
-                                                        <Sparkles aria-hidden="true" className="size-3.5 text-primary" />
+                                                        <AiGlyph aria-hidden="true" className="size-3.5 text-primary" />
                                                         {doc.aiTags.slice(0, 3).map((tag) => (
                                                             <span
                                                                 key={tag}

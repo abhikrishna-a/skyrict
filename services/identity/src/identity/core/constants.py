@@ -286,6 +286,12 @@ SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 
 SYSTEM_ROLE_NAMES = frozenset(name for name, _ in SYSTEM_ROLE_DEFINITIONS)
 
+# The tenant ownership role. Permission resolution
+# (``RoleRepository.get_permissions_for_user``) treats whoever holds it as
+# having full access regardless of the stored permission array, so an owner can
+# never silently lose permissions through drift or a historical bad update.
+TENANT_OWNER_ROLE = "tenant_owner"
+
 INVITATION_TOKEN_EXPIRE_DAYS = 7
 # Employee-portal invites are shorter-lived (spec: single-use, 72h).
 EMPLOYEE_INVITE_TOKEN_EXPIRE_HOURS = 72

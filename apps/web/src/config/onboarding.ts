@@ -1,35 +1,35 @@
 export const onboardingSteps = [
-    { index: 1, label: "Account", shortLabel: "Account", href: "/register" },
+    { index: 1, label: "Account", shortLabel: "Account", href: "/signup" },
     {
         index: 2,
         label: "Verification",
         shortLabel: "Verify",
-        href: "/register/verify",
+        href: "/signup/verify",
     },
     {
         index: 3,
         label: "Security",
         shortLabel: "Security",
-        href: "/register/security",
+        href: "/signup/security",
     },
-    { index: 4, label: "Plan", shortLabel: "Plan", href: "/register/plan" },
+    { index: 4, label: "Plan", shortLabel: "Plan", href: "/signup/plan" },
     {
         index: 5,
         label: "Organization",
         shortLabel: "Organization",
-        href: "/register/organization",
+        href: "/signup/organization",
     },
     {
         index: 6,
         label: "Billing",
         shortLabel: "Billing",
-        href: "/register/billing",
+        href: "/signup/billing",
     },
     {
         index: 7,
         label: "Review",
         shortLabel: "Review",
-        href: "/register/review",
+        href: "/signup/review",
     },
 ] as const;
 

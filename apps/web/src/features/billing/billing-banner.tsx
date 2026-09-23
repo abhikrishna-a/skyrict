@@ -1,8 +1,9 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Sparkles } from "lucide-react";
+
 
 import { getBillingSubscription } from "@/lib/api/billing-api";
 import {
@@ -39,7 +40,7 @@ export function BillingTrialBanner() {
     return (
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
             <p className="flex items-center gap-2 text-sm text-foreground">
-                <Sparkles aria-hidden="true" className="size-4 shrink-0 text-primary" />
+                <AiGlyph aria-hidden="true" className="size-4 shrink-0 text-primary" />
                 <span>
                     You&apos;re on a free trial - {trialCountdownLabel(daysRemaining)}.
                     Upgrade anytime to keep your workspace at full power.

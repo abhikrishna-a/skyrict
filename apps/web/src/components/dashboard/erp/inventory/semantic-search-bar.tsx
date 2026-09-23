@@ -7,8 +7,10 @@ import { Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { type SearchResponse, searchInventory } from "@/lib/api/ai-api";
+import { hasAllPermissions, useModuleAccess } from "@/lib/access/modules";
 
 export function SemanticSearchBar() {
+    const { status: accessStatus, permissions } = useModuleAccess();
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<SearchResponse | null>(null);
     const [loading, setLoading] = useState(false);
@@ -82,6 +84,17 @@ export function SemanticSearchBar() {
             if (debounceRef.current) clearTimeout(debounceRef.current);
         };
     }, []);
+
+    // AI proxy surface: `/ai/inventory/search` needs erp.ai.invoke AND
+    // erp.inventory.read. Render nothing (fail-closed) until the permission set
+    // resolves, and stay hidden when either key is missing - hiding the search
+    // bar replaces a guaranteed 403-on-use.
+    if (
+        accessStatus !== "ready" ||
+        !hasAllPermissions(permissions, ["erp.ai.invoke", "erp.inventory.read"])
+    ) {
+        return null;
+    }
 
     const items = results?.data ?? [];
     const showDropdown = open && (items.length > 0 || query.trim().length >= 2);

@@ -1,3 +1,5 @@
+import type { SVGProps } from "react";
+
 import { cn } from "@/lib/utils";
 
 export type LogoMarkTone = "sky" | "erp" | "ai";
@@ -101,13 +103,18 @@ function LogoMark({
     );
 }
 
-/** Standalone AI orbit glyph that inherits `currentColor` for small inline spots. */
-function AiGlyph({ className }: { className?: string }) {
+/**
+ * Standalone AI orbit glyph that inherits `currentColor` for small inline
+ * spots. Accepts the same presentation props as the lucide icons it
+ * replaces (className, aria-hidden, ...), minus a background.
+ */
+function AiGlyph({ className, ...props }: SVGProps<SVGSVGElement>) {
     return (
         <svg
             viewBox="0 0 24 24"
             aria-hidden="true"
             className={cn("size-4", className)}
+            {...props}
         >
             <circle
                 cx="12"

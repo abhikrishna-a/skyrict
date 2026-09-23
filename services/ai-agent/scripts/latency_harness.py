@@ -56,12 +56,35 @@ from ai_agent.features.nl_query.gateway import (
 from ai_agent.features.supervisor.prompts import CLASSIFY_SYSTEM_PROMPT
 from ai_agent.features.supervisor.schemas import SupervisorEvent, TokenEvent
 from ai_agent.features.supervisor.service import SupervisorService
+from ai_agent.graphs.security import (
+    PERM_AI_COACHING_READ,
+    PERM_AI_GUARDIAN_READ,
+    PERM_AI_INVOKE,
+    PERM_CRM_READ,
+    PERM_FINANCE_READ,
+    PERM_HR_AI_READ,
+    PERM_INVENTORY_READ,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 TENANT_ID = uuid.uuid4()
 USER_ID = uuid.uuid4()
+
+# Fully privileged caller for the perf harness: every module key the
+# supervisor gates on, so measured turns never hit the authz refusal path.
+_ALL_MODULE_GRANTS = frozenset(
+    {
+        PERM_AI_INVOKE,
+        PERM_INVENTORY_READ,
+        PERM_HR_AI_READ,
+        PERM_CRM_READ,
+        PERM_FINANCE_READ,
+        PERM_AI_COACHING_READ,
+        PERM_AI_GUARDIAN_READ,
+    }
+)
 
 DEFAULT_TARGET_MS = 1000
 DEFAULT_SAMPLES = 21
@@ -192,6 +215,10 @@ def build_service(*, router: StubRouter, caches: bool = False) -> SupervisorServ
     With ``caches`` the classification + response caches are wired as
     in-memory stores so a repeated identical turn skips the provider calls -
     the warm-path the SKY-100 gate commits to.
+
+    The harness simulates a fully privileged caller (every module key), so the
+    measured turn never trips the caller-grant refusal path - the gate is about
+    latency, not authz.
     """
 
     gateway = StubGateway()
@@ -203,6 +230,7 @@ def build_service(*, router: StubRouter, caches: bool = False) -> SupervisorServ
         llm_router=LlmRouter([router]),
         gateway_factory=gateway_factory,
         provisioned={"inventory_monitor": True},
+        granted_permissions=_ALL_MODULE_GRANTS,
         classification_cache=MemoryResponseCache() if caches else None,
         response_cache=MemoryResponseCache() if caches else None,
         classification_cache_ttl_seconds=300,

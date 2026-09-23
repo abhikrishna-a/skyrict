@@ -1,11 +1,11 @@
 "use client";
+import { AiGlyph } from "@/components/brand/logo";
 
 import { useRouter } from "next/navigation";
 import {
     BadgeCheck,
     Compass,
     Globe,
-    Sparkles,
     Tags,
     TrendingUp,
     type LucideIcon,
@@ -15,7 +15,7 @@ interface ExploreCategory {
     title: string;
     description: string;
     query: string;
-    icon: LucideIcon;
+    icon: LucideIcon | typeof AiGlyph;
 }
 
 const CATEGORIES: ExploreCategory[] = [
@@ -37,7 +37,7 @@ const CATEGORIES: ExploreCategory[] = [
         description:
             "Crowded ideas with empty shelves. Whitespace worth building.",
         query: "underserved niches in SaaS",
-        icon: Sparkles,
+        icon: AiGlyph,
     },
     {
         title: "Pricing intelligence",

@@ -1,10 +1,16 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Menu, Play } from "lucide-react";
+import { CircleHelp, Menu, Settings } from "lucide-react";
 
 import { NotificationCenter } from "@/features/notifications/notification-center";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { resolvePageTitle } from "@/lib/page-title";
 import { PAGE_TITLE_EVENT } from "@/lib/topbar-title";
@@ -58,20 +64,43 @@ export function Topbar({ onOpenMenu }: TopbarProps) {
 
             <div className="flex shrink-0 items-center gap-2">
                 {(pathname === "/" || pathname === "/dashboard") && (
-                    <button
-                        type="button"
-                        aria-label="Replay product tour"
-                        title="Replay tour"
-                        onClick={() =>
-                            window.dispatchEvent(
-                                new Event("skyrict:start-tour"),
-                            )
-                        }
-                        className="flex size-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-muted/60"
-                    >
-                        <Play aria-hidden="true" className="size-5" />
-                    </button>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <button
+                                type="button"
+                                aria-label="Replay product tour"
+                                onClick={() =>
+                                    window.dispatchEvent(
+                                        new Event("skyrict:start-tour"),
+                                    )
+                                }
+                                className="flex size-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-muted/60"
+                            >
+                                <CircleHelp
+                                    aria-hidden="true"
+                                    className="size-5"
+                                />
+                            </button>
+                        </TooltipTrigger>
+                        <TooltipContent side="bottom" sideOffset={6}>
+                            Replay tour
+                        </TooltipContent>
+                    </Tooltip>
                 )}
+                <Tooltip>
+                    <TooltipTrigger asChild>
+                        <Link
+                            href="/settings"
+                            aria-label="Settings"
+                            className="flex size-9 shrink-0 items-center justify-center rounded-lg text-foreground transition-colors hover:bg-muted/60"
+                        >
+                            <Settings aria-hidden="true" className="size-5" />
+                        </Link>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" sideOffset={6}>
+                        Settings
+                    </TooltipContent>
+                </Tooltip>
                 <NotificationCenter />
             </div>
         </header>

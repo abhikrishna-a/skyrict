@@ -26,7 +26,6 @@ dev = [
     "isort>=6.0,<7",
     "bandit>=1.7,<2",
     "testcontainers[postgres]>=4.0,<5",
-    "types-python-jose>=3.3,<4",
     "types-Pillow>=10.2.0.20240822,<11",
     "import-linter>=2.0,<3",
 ]
@@ -135,29 +134,51 @@ exclude_type_checking_imports = true
 name = "Feature packages are independent"
 type = "independence"
 modules = [
-    "identity.features.auth",
-    "identity.features.users",
-    "identity.features.organizations",
-    "identity.features.sessions",
-    "identity.features.mfa",
-    "identity.features.passkeys",
-    "identity.features.sso",
-    "identity.features.roles",
     "identity.features.audit",
+    "identity.features.auth",
+    "identity.features.avatars",
     "identity.features.billing",
+    "identity.features.handoffs",
+    "identity.features.invitations",
+    "identity.features.members",
+    "identity.features.memberships",
+    "identity.features.mfa",
+    "identity.features.organizations",
+    "identity.features.passkeys",
+    "identity.features.roles",
+    "identity.features.sessions",
+    "identity.features.sso",
+    "identity.features.users",
 ]
-# Legitimate exceptions, ignored so the contract protects real coupling:
+# Legitimate exceptions, ignored so the contract protects real coupling
+# (mirrors services/identity/import-linter.toml, the canonical contract):
 # 1. Every feature router consumes the api composition root (get_current_user,
 #    get_db, service factories). api.deps is the sole wiring point; features
 #    never import one another's services directly.
 # 2. The auth feature embeds the user profile in its response schema - a pure
 #    pydantic model cross-reference (data contract), not a behavioral coupling.
-# 3. auth provisioning and billing both need the planId<->tier catalog
-#    (PLAN_ID_MAP), a pure reference-data module - not a behavioral coupling.
+# 3. Billing reference data is shared across features for checkout flows:
+#    auth.schemas needs CURRENCY_LITERAL (signup-with-checkout requests) and
+#    auth.service reads the planId<->tier catalog (PLAN_ID_MAP) from
+#    billing.plans; billing is the canonical source of truth.
+# 4. The auth router orchestrates signup-with-checkout by calling the billing
+#    service - the composition root for that flow.
+# 5. The invitations feature returns the accepted user's profile as its
+#    POST /accept response - the same pydantic data-contract cross-reference
+#    as exception 2.
+# 6. The avatars and members routers reuse the canonical response schemas of
+#    other features (users.schemas for avatar endpoints, sessions.schemas for
+#    member session management) - response data contracts only.
 ignore_imports = [
     "identity.features.**.router -> identity.api.deps",
     "identity.features.auth.schemas -> identity.features.users.schemas",
+    "identity.features.auth.schemas -> identity.features.billing.plans",
     "identity.features.auth.service -> identity.features.billing.plans",
+    "identity.features.auth.router -> identity.features.billing.schemas",
+    "identity.features.auth.router -> identity.features.billing.service",
+    "identity.features.invitations.router -> identity.features.users.schemas",
+    "identity.features.avatars.router -> identity.features.users.schemas",
+    "identity.features.members.router -> identity.features.sessions.schemas",
 ]
 
 [[tool.importlinter.contracts]]
@@ -185,7 +206,11 @@ allow_indirect_imports = true
 ignore_imports = [
     "identity.features.**.repository -> identity.models.**",
     "identity.features.**.repository -> identity.db.**",
+    # Sanctioned cross-DB bridges: identity features that keep core's
+    # projections current (core_roles / core_user_roles) over the shared
+    # database. rbac_mirror is the invitation-accept pattern for role edits.
     "identity.features.invitations.service -> identity.db.session",
+    "identity.features.roles.rbac_mirror -> identity.db.session",
 ]
 
 [[tool.importlinter.contracts]]

@@ -22,8 +22,8 @@ import time
 import uuid
 from typing import TYPE_CHECKING
 
+import jwt
 import pytest
-from jose import jwt
 
 from core.core.config import settings
 from core.core.tenant_context import TenantContext
