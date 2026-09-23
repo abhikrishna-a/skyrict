@@ -6,12 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-    AgentsHomeSkeleton,
-    ErpOverviewSkeleton,
-    IntelligenceHomeSkeleton,
-    OverviewSkeleton,
-} from "@/components/ui/page-skeletons";
 import { useModuleAccess, type ModuleKey } from "@/lib/access/modules";
 import {
     resolveAccessDecision,
@@ -19,21 +13,17 @@ import {
 } from "@/lib/access/route-permissions";
 
 /**
- * Loading indicator while permissions resolve or a redirect runs.
+ * No loading UI - intentionally renders nothing.
  *
- * Renders the world's own body skeleton instead of a bare centered spinner, so
- * a cache-miss navigation inside an already-mounted shell never flashes a
- * spinner over the live chrome. The shape matches the route fallback the user
- * expects for that world (workspace/portal -> Overview, ERP -> ERP overview,
- * agents -> agents home, intelligence -> intelligence home). Content-shaped,
- * never a full world shell (the shell chrome is already mounted around this
- * boundary).
+ * The gate's only job is to stop a denied surface from mounting (and firing
+ * its protected API call). While permissions resolve the content slot stays
+ * empty; the page's OWN existing loading state - the route's skeleton or
+ * spinner - is the sole loading UI, and it appears the moment access is
+ * granted. A fallback here would paint a second, generic loading layer on top
+ * of the route's own (and two loading UIs back to back on every hard reload).
  */
-export function ModuleLoading({ module }: { module?: ModuleKey }) {
-    if (module === "erp") return <ErpOverviewSkeleton />;
-    if (module === "agents") return <AgentsHomeSkeleton />;
-    if (module === "intelligence") return <IntelligenceHomeSkeleton />;
-    return <OverviewSkeleton />;
+export function ModuleLoading() {
+    return null;
 }
 
 export function ModuleAccessError() {
@@ -115,7 +105,7 @@ export function ModuleAccessBoundary({
         if (redirect) void router.replace(redirect);
     }, [redirect, router]);
 
-    if (decision.state === "loading") return <ModuleLoading module={module} />;
+    if (decision.state === "loading") return <ModuleLoading />;
     if (decision.state === "error") return <ModuleAccessError />;
     if (decision.state === "denied") {
         // Denied surfaces never render their own content shape: show the

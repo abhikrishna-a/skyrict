@@ -47,31 +47,31 @@ export function ErpShell({ children }: { children: React.ReactNode }) {
     );
 
     return (
-        <ModuleAccessBoundary module="erp">
-            <div
-                className="flex h-dvh overflow-hidden bg-background theme-erp"
-                data-theme-scope
-            >
-                <AppSidebar
-                    collapsed={collapsed}
-                    mobileOpen={mobileOpen}
-                    onToggleCollapsed={toggleCollapsed}
-                    onCloseMobile={() => setMobileOpen(false)}
-                    navGroups={navGroups}
-                    accountItems={[]}
-                    brandHref="/erp"
-                    logoTone="erp"
-                    showBackToOverview
-                />
-                <div className="flex min-w-0 flex-1 flex-col">
-                    <Topbar onOpenMenu={() => setMobileOpen(true)} />
-                    <main className="flex-1 overflow-y-auto">
+        <div
+            className="flex h-dvh overflow-hidden bg-background theme-erp"
+            data-theme-scope
+        >
+            <AppSidebar
+                collapsed={collapsed}
+                mobileOpen={mobileOpen}
+                onToggleCollapsed={toggleCollapsed}
+                onCloseMobile={() => setMobileOpen(false)}
+                navGroups={navGroups}
+                accountItems={[]}
+                brandHref="/erp"
+                logoTone="erp"
+                showBackToOverview
+            />
+            <div className="flex min-w-0 flex-1 flex-col">
+                <Topbar onOpenMenu={() => setMobileOpen(true)} />
+                <main className="flex-1 overflow-y-auto">
+                    <ModuleAccessBoundary module="erp">
                         <div className="mx-auto w-full max-w-6xl px-4 py-6 lg:px-6 lg:py-8">
                             {children}
                         </div>
-                    </main>
-                </div>
+                    </ModuleAccessBoundary>
+                </main>
             </div>
-        </ModuleAccessBoundary>
+        </div>
     );
 }

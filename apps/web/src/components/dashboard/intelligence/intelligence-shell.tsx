@@ -99,7 +99,7 @@ export function IntelligenceShell({ children }: { children: React.ReactNode }) {
     );
 
     return (
-        <ModuleAccessBoundary module="intelligence">
+        <>
             <div
                 className="flex h-dvh flex-col overflow-hidden bg-background"
                 data-theme-scope
@@ -184,9 +184,11 @@ export function IntelligenceShell({ children }: { children: React.ReactNode }) {
                 </header>
 
                 <main className="flex-1 overflow-y-auto">
-                    <div className="mx-auto w-full max-w-5xl px-4 py-8 lg:px-6">
-                        {children}
-                    </div>
+                    <ModuleAccessBoundary module="intelligence">
+                        <div className="mx-auto w-full max-w-5xl px-4 py-8 lg:px-6">
+                            {children}
+                        </div>
+                    </ModuleAccessBoundary>
                 </main>
             </div>
 
@@ -194,6 +196,6 @@ export function IntelligenceShell({ children }: { children: React.ReactNode }) {
                 open={menuOpen}
                 onClose={() => setMenuOpen(false)}
             />
-        </ModuleAccessBoundary>
+        </>
     );
 }
