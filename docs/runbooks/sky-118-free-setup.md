@@ -66,14 +66,57 @@ values (deals 1000 USD / 2000 EUR, revenue 550 USD / 1200 EUR, pipeline
 4. Money measures: always `SUM` per `currency_code` — never across currencies.
 5. Verify against the parity totals. That is BI-PBI-001's acceptance.
 
-## 5. Optional: Fabric 60-day trial (free)
+## 5. Optional: Fabric 60-day trial (free, $0, no credit card)
 
-Only if you have a **work/school** Microsoft account (personal accounts are
-rejected). The trial grants a full F64 capacity for 60 days.
+Requires a **work/school** Microsoft account (personal Microsoft accounts are
+rejected in most regions). The trial grants a full **F64 capacity for 60
+days** — Microsoft's docs: *"no credit card required"*. When it ends, items
+go read-only (7-day grace to move them); nothing auto-charges.
 
-1. `https://app.fabric.microsoft.com` → sign in → **Start trial**.
-2. Create workspace `skyrict-etl` → **+ New → Lakehouse** → `skyrict_lakehouse`.
-3. **+ New → Environment** → `skyrict_env`:
+### 5a. Minimal DoD path — load Gold into a Fabric Warehouse (paste SQL)
+
+This is the fastest way to satisfy "Gold queryable in Fabric Warehouse;
+sample queries match seeded totals."
+
+1. Regenerate the load script (committed sample is
+   `fabric/samples/warehouse-load.sql`):
+
+   ```powershell
+   uv run --project libs/skyrict-fabric python -m skyrict_fabric gold-tsql gold.json fabric/samples/warehouse-load.sql
+   ```
+
+2. `https://app.fabric.microsoft.com` → sign in with work/school account →
+   account manager (top-right) → **Start trial** → pick trial region →
+   agree to terms → **Activate**. If you see any payment/upgrade screen,
+   back out — the trial itself never asks for a card.
+3. **+ New workspace** → name `skyrict-etl` → set **License: Trial** (F64).
+4. **+ New item → Warehouse** → name `skyrict_warehouse` → wait until
+   *Deploying* finishes (1–3 min).
+5. Open the Warehouse → **SQL analytics endpoint** (or **Open in SSMS /
+   New query** in the portal query editor).
+6. Paste the entire contents of `fabric/samples/warehouse-load.sql` →
+   **Run**. Expect 7 `CREATE TABLE` + 9 `INSERT` batches, no errors.
+7. Paste `fabric/samples/parity-queries.sql` → **Run**. Expected results:
+
+   | Query | Expected |
+   | --- | --- |
+   | deals by currency | EUR 1 row / 2000; USD 1 row / 1000 |
+   | revenue by currency | EUR 1 row / 1200; USD 1 row / 550 |
+   | pipeline by currency | USD 1 row / 3000 |
+   | customer / rep / date counts | 3 / 3 / 250 |
+   | unassigned rep (NIL UUID) | 1 |
+   | deal_rows = distinct_deals = join_count | 2 = 2 = 2 |
+
+   Matching totals = DoD + BI-PBI-001 acceptance. Done — stop here if that
+   is all you need.
+
+### 5b. Full path — run the notebooks inside Fabric
+
+Only if you also want the medallion notebooks to execute on the trial
+runtime (optional; the pipeline already works locally against Neon).
+
+1. **+ New → Lakehouse** → `skyrict_lakehouse`.
+2. **+ New → Environment** → `skyrict_env`:
    - Public libraries: `pydantic>=2.7,<3`, `sqlalchemy[asyncio]>=2.0,<3`,
      `asyncpg>=0.30,<1`, `psycopg2-binary>=2.9,<3`, `typer>=0.12,<1`,
      `pyarrow>=15,<21`
@@ -82,14 +125,14 @@ rejected). The trial grants a full F64 capacity for 60 days.
    - Spark settings → runtime 1.3 (Python 3.11) — compatible since the
      `requires-python >=3.11` fix
    - **Publish** (wait 5–15 min)
-4. **+ New → Notebook** → import `fabric/notebooks/gold_star_schema.notebook`
+3. **+ New → Notebook** → import `fabric/notebooks/gold_star_schema.notebook`
    (and the two silver notebooks for the full Bronze chain). Attach
    `skyrict_env` + `skyrict_lakehouse` to each.
-5. Upload `silver.json` → `Files/silver/crm_sales.json` and `expected.json` →
+4. Upload `silver.json` → `Files/silver/crm_sales.json` and `expected.json` →
    `Files/gold/expected.json` (Lakehouse explorer → Files → Upload).
-6. Run the gold notebook: build → reconcile (all PASS) → load. For the load
+5. Run the gold notebook: build → reconcile (all PASS) → load. For the load
    cell, set `SKYRICT_DB_URL` to the Neon string (or a Key Vault secret).
-7. When the trial ends, items go read-only — nothing is deleted, and the
+6. When the trial ends, items go read-only — nothing is deleted, and the
    pipeline keeps working locally against Neon.
 
 ## 6. Optional: schedule it free (GitHub Actions)

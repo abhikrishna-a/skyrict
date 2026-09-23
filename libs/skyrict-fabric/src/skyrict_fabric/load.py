@@ -129,3 +129,92 @@ def upsert_rows(engine: Engine, table: Table, rows: list[dict[str, Any]]) -> int
     with engine.begin() as conn:
         conn.execute(stmt)
     return len(rows)
+
+
+def _tsql_type(annotation: Any) -> str:
+    annotation = _unwrap(annotation)
+    if annotation is uuid.UUID:
+        return "UNIQUEIDENTIFIER"
+    if annotation is int:
+        return "INTEGER"
+    if annotation is Decimal:
+        return "NUMERIC(18, 4)"
+    if annotation is datetime:
+        return "DATETIMEOFFSET"
+    if annotation is date:
+        return "DATE"
+    if annotation is bool:
+        return "BIT"
+    if annotation is str:
+        return "VARCHAR(255)"
+    raise TypeError(f"unsupported field type: {annotation}")
+
+
+def _tsql_literal(tsql_type: str, value: Any) -> str:
+    if value is None:
+        return "NULL"
+    if tsql_type == "BIT":
+        return "1" if value else "0"
+    if tsql_type == "UNIQUEIDENTIFIER":
+        return f"'{value}'"
+    if tsql_type in ("NUMERIC(18, 4)", "INTEGER"):
+        return str(value)
+    if tsql_type == "DATETIMEOFFSET":
+        text = str(value)
+        # gold.json is naive ISO; T-SQL datetimeoffset requires an offset
+        head, _, tail = text.partition("T")
+        if _ and "+" not in tail and not tail.endswith("Z"):
+            text = f"{head}T{tail}+00:00"
+        return f"'{text}'"
+    if tsql_type == "DATE":
+        return f"'{str(value)[:10]}'"
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def emit_tsql(gold: dict[str, list[dict[str, Any]]]) -> str:
+    """Render gold.json as paste-able T-SQL for a Fabric Warehouse SQL endpoint.
+
+    Hand-rolled DDL (not SQLAlchemy mssql compile) so integer PKs never become
+    IDENTITY and reserved column names (year/month/day) stay bracketed.
+    """
+    lines = [
+        "-- SKY-118: load Gold star schema into Fabric Warehouse (T-SQL)",
+        "-- Generate: python -m skyrict_fabric gold-tsql gold.json warehouse-load.sql",
+        "-- Paste into the Warehouse SQL endpoint editor and run once.",
+        "",
+    ]
+    for name, model in GOLD_MODELS.items():
+        rows = gold.get(name, [])
+        fields = list(model.model_fields.items())
+        col_defs: list[str] = []
+        col_names: list[str] = []
+        types: list[str] = []
+        for i, (fname, field) in enumerate(fields):
+            tsql_type = _tsql_type(field.annotation)
+            types.append(tsql_type)
+            col_names.append(f"[{fname}]")
+            # T-SQL columns are nullable by default — required ones need NOT NULL
+            required = i == 0 or field.is_required()
+            null_sql = " NOT NULL" if required else " NULL"
+            col_defs.append(f"    [{fname}] {tsql_type}{null_sql}")
+        pk = fields[0][0]
+        lines.append(f"IF OBJECT_ID(N'{name}', N'U') IS NOT NULL DROP TABLE [{name}];")
+        lines.append(f"CREATE TABLE [{name}] (")
+        lines.append(",\n".join(col_defs) + ",")
+        lines.append(f"    PRIMARY KEY ([{pk}])")
+        lines.append(");")
+        if rows:
+            cols = ", ".join(col_names)
+            # ponytail: 100 rows/statement stays under T-SQL VALUES limits
+            for start in range(0, len(rows), 100):
+                chunk = rows[start : start + 100]
+                tuples = []
+                for row in chunk:
+                    vals = [
+                        _tsql_literal(types[j], row.get(fields[j][0])) for j in range(len(fields))
+                    ]
+                    tuples.append("(" + ", ".join(vals) + ")")
+                lines.append(f"INSERT INTO [{name}] ({cols}) VALUES")
+                lines.append(",\n".join(tuples) + ";")
+        lines.append("")
+    return "\n".join(lines) + "\n"

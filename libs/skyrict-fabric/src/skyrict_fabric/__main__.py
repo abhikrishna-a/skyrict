@@ -5,6 +5,7 @@ Subcommands:
 * ``silver-export`` -- write Silver tables to Parquet (one file per table)
 * ``gold-build``    -- assemble Gold star schema from Silver rows (JSON in/out)
 * ``gold-load``     -- upsert Gold tables into a Warehouse (SCD-1)
+* ``gold-tsql``     -- emit paste-able T-SQL for a Fabric Warehouse SQL endpoint
 * ``gold-reconcile``-- compare Gold aggregates against expected totals
 * ``lineage-report``-- print the Bronze -> Silver -> Gold lineage registry
 
@@ -206,6 +207,19 @@ def gold_load(
     for name, table in tables.items():
         n = upsert_rows(engine, table, gold.get(name, []))
         typer.echo(f"upserted {n} rows into {name}")
+
+
+@app.command("gold-tsql")
+def gold_tsql(
+    gold_json: Annotated[Path, typer.Argument(help="JSON output of gold-build")],
+    output_sql: Annotated[Path, typer.Argument(help="T-SQL output path")],
+) -> None:
+    """Emit DROP/CREATE/INSERT T-SQL for a Fabric Warehouse SQL endpoint."""
+    from skyrict_fabric.load import emit_tsql
+
+    gold = _load_json(gold_json)
+    output_sql.write_text(emit_tsql(gold), encoding="utf-8")
+    typer.echo(f"wrote {output_sql}")
 
 
 @app.command("gold-reconcile")
