@@ -1,4 +1,5 @@
 """Bronze-to-Silver transform functions."""
+
 from __future__ import annotations
 
 import uuid
@@ -32,6 +33,7 @@ __all__ = [
     "transform_sales_orders",
 ]
 
+
 def _safe_str(val: Any, max_len: int | None = None) -> str | None:
     if val is None:
         return None
@@ -40,6 +42,7 @@ def _safe_str(val: Any, max_len: int | None = None) -> str | None:
         return None
     return s[:max_len] if max_len else s
 
+
 def _safe_uuid(val: Any) -> uuid.UUID | None:
     if val is None:
         return None
@@ -47,6 +50,7 @@ def _safe_uuid(val: Any) -> uuid.UUID | None:
         return uuid.UUID(str(val))
     except (ValueError, AttributeError):
         return None
+
 
 def _safe_datetime(val: Any) -> datetime | None:
     if val is None:
@@ -59,6 +63,7 @@ def _safe_datetime(val: Any) -> datetime | None:
         except ValueError:
             return None
     return None
+
 
 def _safe_date(val: Any) -> date | None:
     if val is None:
@@ -74,13 +79,16 @@ def _safe_date(val: Any) -> date | None:
             return None
     return None
 
+
 def _norm_enum(val: Any, default: str = "") -> str:
     if val is None:
         return default
     return str(val).strip().lower()
 
+
 _NIL = uuid.UUID("00000000-0000-0000-0000-000000000000")
 _MIN = datetime.min
+
 
 def transform_currencies(row: dict[str, Any]) -> SilverCurrencies:
     return SilverCurrencies(
@@ -90,6 +98,7 @@ def transform_currencies(row: dict[str, Any]) -> SilverCurrencies:
         decimal_places=int(row.get("decimal_places", 2)),
         is_active=bool(row.get("is_active", True)),
     )
+
 
 def transform_crm_leads(row: dict[str, Any]) -> SilverCrmLeads:
     return SilverCrmLeads(
@@ -107,6 +116,7 @@ def transform_crm_leads(row: dict[str, Any]) -> SilverCrmLeads:
         created_at=_safe_datetime(row["created_at"]) or _MIN,
         updated_at=_safe_datetime(row["updated_at"]) or _MIN,
     )
+
 
 def transform_crm_opportunities(row: dict[str, Any]) -> SilverCrmOpportunities:
     amount_raw = row.get("amount")
@@ -131,6 +141,7 @@ def transform_crm_opportunities(row: dict[str, Any]) -> SilverCrmOpportunities:
         updated_at=_safe_datetime(row["updated_at"]) or _MIN,
     )
 
+
 def transform_crm_customers(row: dict[str, Any]) -> SilverCrmCustomers:
     return SilverCrmCustomers(
         tenant_id=_safe_uuid(row["tenant_id"]) or _NIL,
@@ -146,6 +157,7 @@ def transform_crm_customers(row: dict[str, Any]) -> SilverCrmCustomers:
         created_at=_safe_datetime(row["created_at"]) or _MIN,
         updated_at=_safe_datetime(row["updated_at"]) or _MIN,
     )
+
 
 def transform_sales_orders(row: dict[str, Any]) -> SilverSalesOrders:
     return SilverSalesOrders(
@@ -164,6 +176,7 @@ def transform_sales_orders(row: dict[str, Any]) -> SilverSalesOrders:
         updated_at=_safe_datetime(row["updated_at"]) or _MIN,
     )
 
+
 def transform_sales_order_lines(row: dict[str, Any]) -> SilverSalesOrderLines:
     return SilverSalesOrderLines(
         tenant_id=_safe_uuid(row["tenant_id"]) or _NIL,
@@ -179,6 +192,7 @@ def transform_sales_order_lines(row: dict[str, Any]) -> SilverSalesOrderLines:
         created_at=_safe_datetime(row["created_at"]) or _MIN,
         updated_at=_safe_datetime(row["updated_at"]) or _MIN,
     )
+
 
 def transform_invoices(row: dict[str, Any]) -> SilverInvoices:
     return SilverInvoices(
@@ -201,6 +215,7 @@ def transform_invoices(row: dict[str, Any]) -> SilverInvoices:
         updated_at=_safe_datetime(row["updated_at"]) or _MIN,
     )
 
+
 def transform_payments(row: dict[str, Any]) -> SilverPayments:
     return SilverPayments(
         tenant_id=_safe_uuid(row["tenant_id"]) or _NIL,
@@ -219,6 +234,7 @@ def transform_payments(row: dict[str, Any]) -> SilverPayments:
         updated_at=_safe_datetime(row["updated_at"]) or _MIN,
     )
 
+
 def transform_journal_lines(row: dict[str, Any]) -> SilverJournalLines:
     return SilverJournalLines(
         tenant_id=_safe_uuid(row["tenant_id"]) or _NIL,
@@ -233,6 +249,7 @@ def transform_journal_lines(row: dict[str, Any]) -> SilverJournalLines:
         created_at=_safe_datetime(row["created_at"]) or _MIN,
         updated_at=_safe_datetime(row["updated_at"]) or _MIN,
     )
+
 
 def transform_products(row: dict[str, Any]) -> SilverProducts:
     return SilverProducts(

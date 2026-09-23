@@ -15,14 +15,14 @@ CREATE TABLE [gold_dim_customer] (
     [credit_currency] VARCHAR(255) NULL,
     [is_active] BIT NULL,
     [source_opportunity_id] UNIQUEIDENTIFIER NULL,
-    [first_seen_at] DATETIMEOFFSET NOT NULL,
-    [last_updated_at] DATETIMEOFFSET NOT NULL,
-    PRIMARY KEY ([customer_key])
+    [first_seen_at] DATETIME2(6) NOT NULL,
+    [last_updated_at] DATETIME2(6) NOT NULL
 );
+ALTER TABLE [gold_dim_customer] ADD CONSTRAINT [pk_gold_dim_customer] PRIMARY KEY NONCLUSTERED ([customer_key]) NOT ENFORCED;
 INSERT INTO [gold_dim_customer] ([customer_key], [tenant_id], [source_customer_id], [customer_code], [name], [email], [phone], [credit_limit], [credit_currency], [is_active], [source_opportunity_id], [first_seen_at], [last_updated_at]) VALUES
-('5aa56cf9-e462-5acd-9c60-3f92ec76acdd', '11111111-1111-1111-1111-111111111111', '55555555-5555-5555-5555-555555555555', 'C001', 'Acme', NULL, NULL, 50000.0000, 'USD', 1, '99999999-9999-9999-9999-999999999999', '2026-09-21T12:00:00+00:00', '2026-09-21T12:00:00+00:00'),
-('b045bc2f-7247-596b-a674-302e22b346bb', '11111111-1111-1111-1111-111111111111', '66666666-6666-6666-6666-666666666666', 'C002', 'Globex', NULL, NULL, 100000.0000, 'EUR', 1, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-09-21T12:00:00+00:00', '2026-09-21T12:00:00+00:00'),
-('b8ef9767-4753-563e-b8d5-ba978988af44', '22222222-2222-2222-2222-222222222222', 'c50009fb-2d01-5e4f-9e5e-984719c84888', 'C003', 'Initech', NULL, NULL, 25000.0000, 'USD', 0, NULL, '2026-09-21T12:00:00+00:00', '2026-09-21T12:00:00+00:00');
+('5aa56cf9-e462-5acd-9c60-3f92ec76acdd', '11111111-1111-1111-1111-111111111111', '55555555-5555-5555-5555-555555555555', 'C001', 'Acme', NULL, NULL, 50000.0000, 'USD', 1, '99999999-9999-9999-9999-999999999999', '2026-09-21 12:00:00', '2026-09-21 12:00:00'),
+('b045bc2f-7247-596b-a674-302e22b346bb', '11111111-1111-1111-1111-111111111111', '66666666-6666-6666-6666-666666666666', 'C002', 'Globex', NULL, NULL, 100000.0000, 'EUR', 1, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', '2026-09-21 12:00:00', '2026-09-21 12:00:00'),
+('b8ef9767-4753-563e-b8d5-ba978988af44', '22222222-2222-2222-2222-222222222222', 'c50009fb-2d01-5e4f-9e5e-984719c84888', 'C003', 'Initech', NULL, NULL, 25000.0000, 'USD', 0, NULL, '2026-09-21 12:00:00', '2026-09-21 12:00:00');
 
 IF OBJECT_ID(N'gold_dim_product', N'U') IS NOT NULL DROP TABLE [gold_dim_product];
 CREATE TABLE [gold_dim_product] (
@@ -37,13 +37,13 @@ CREATE TABLE [gold_dim_product] (
     [sell_price] NUMERIC(18, 4) NULL,
     [sell_currency] VARCHAR(255) NULL,
     [is_active] BIT NULL,
-    [first_seen_at] DATETIMEOFFSET NOT NULL,
-    [last_updated_at] DATETIMEOFFSET NOT NULL,
-    PRIMARY KEY ([product_key])
+    [first_seen_at] DATETIME2(6) NOT NULL,
+    [last_updated_at] DATETIME2(6) NOT NULL
 );
+ALTER TABLE [gold_dim_product] ADD CONSTRAINT [pk_gold_dim_product] PRIMARY KEY NONCLUSTERED ([product_key]) NOT ENFORCED;
 INSERT INTO [gold_dim_product] ([product_key], [tenant_id], [source_product_id], [sku], [name], [description], [cost_price], [cost_currency], [sell_price], [sell_currency], [is_active], [first_seen_at], [last_updated_at]) VALUES
-('868d0571-72be-5b41-8b49-38fd3e8a355f', '11111111-1111-1111-1111-111111111111', '77777777-7777-7777-7777-777777777777', 'SKU-001', 'Widget', NULL, 10.0000, 'USD', 25.0000, 'USD', 1, '2026-09-21T12:00:00+00:00', '2026-09-21T12:00:00+00:00'),
-('2d86b4a4-02bd-5116-8b2d-e9cc97358bb5', '11111111-1111-1111-1111-111111111111', '88888888-8888-8888-8888-888888888888', 'SKU-002', 'Gadget', NULL, 20.0000, 'EUR', 50.0000, 'EUR', 1, '2026-09-21T12:00:00+00:00', '2026-09-21T12:00:00+00:00');
+('868d0571-72be-5b41-8b49-38fd3e8a355f', '11111111-1111-1111-1111-111111111111', '77777777-7777-7777-7777-777777777777', 'SKU-001', 'Widget', NULL, 10.0000, 'USD', 25.0000, 'USD', 1, '2026-09-21 12:00:00', '2026-09-21 12:00:00'),
+('2d86b4a4-02bd-5116-8b2d-e9cc97358bb5', '11111111-1111-1111-1111-111111111111', '88888888-8888-8888-8888-888888888888', 'SKU-002', 'Gadget', NULL, 20.0000, 'EUR', 50.0000, 'EUR', 1, '2026-09-21 12:00:00', '2026-09-21 12:00:00');
 
 IF OBJECT_ID(N'gold_dim_date', N'U') IS NOT NULL DROP TABLE [gold_dim_date];
 CREATE TABLE [gold_dim_date] (
@@ -56,9 +56,9 @@ CREATE TABLE [gold_dim_date] (
     [month_name] VARCHAR(255) NOT NULL,
     [day_of_week] VARCHAR(255) NOT NULL,
     [is_weekend] BIT NOT NULL,
-    [fiscal_year] INTEGER NULL,
-    PRIMARY KEY ([date_key])
+    [fiscal_year] INTEGER NULL
 );
+ALTER TABLE [gold_dim_date] ADD CONSTRAINT [pk_gold_dim_date] PRIMARY KEY NONCLUSTERED ([date_key]) NOT ENFORCED;
 INSERT INTO [gold_dim_date] ([date_key], [date_value], [year], [month], [day], [quarter], [month_name], [day_of_week], [is_weekend], [fiscal_year]) VALUES
 (20260115, '2026-01-15', 2026, 1, 15, 1, 'January', 'Thursday', 0, 2026),
 (20260116, '2026-01-16', 2026, 1, 16, 1, 'January', 'Friday', 0, 2026),
@@ -318,14 +318,14 @@ CREATE TABLE [gold_dim_rep] (
     [rep_key] UNIQUEIDENTIFIER NOT NULL,
     [tenant_id] UNIQUEIDENTIFIER NOT NULL,
     [source_owner_id] UNIQUEIDENTIFIER NOT NULL,
-    [first_seen_at] DATETIMEOFFSET NOT NULL,
-    [last_updated_at] DATETIMEOFFSET NOT NULL,
-    PRIMARY KEY ([rep_key])
+    [first_seen_at] DATETIME2(6) NOT NULL,
+    [last_updated_at] DATETIME2(6) NOT NULL
 );
+ALTER TABLE [gold_dim_rep] ADD CONSTRAINT [pk_gold_dim_rep] PRIMARY KEY NONCLUSTERED ([rep_key]) NOT ENFORCED;
 INSERT INTO [gold_dim_rep] ([rep_key], [tenant_id], [source_owner_id], [first_seen_at], [last_updated_at]) VALUES
-('b7fcdf4c-38b0-56b6-b58f-530c9ebf5703', '11111111-1111-1111-1111-111111111111', '33333333-3333-3333-3333-333333333333', '2026-09-21T12:00:00+00:00', '2026-09-21T12:00:00+00:00'),
-('ae30f69e-2bb7-5329-9d33-92dc6d4ac7eb', '11111111-1111-1111-1111-111111111111', '44444444-4444-4444-4444-444444444444', '2026-09-21T12:00:00+00:00', '2026-09-21T12:00:00+00:00'),
-('ded8f2fa-e743-5984-912d-949f212c7ec8', '11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-000000000000', '0001-01-01T00:00:00+00:00', '0001-01-01T00:00:00+00:00');
+('b7fcdf4c-38b0-56b6-b58f-530c9ebf5703', '11111111-1111-1111-1111-111111111111', '33333333-3333-3333-3333-333333333333', '2026-09-21 12:00:00', '2026-09-21 12:00:00'),
+('ae30f69e-2bb7-5329-9d33-92dc6d4ac7eb', '11111111-1111-1111-1111-111111111111', '44444444-4444-4444-4444-444444444444', '2026-09-21 12:00:00', '2026-09-21 12:00:00'),
+('ded8f2fa-e743-5984-912d-949f212c7ec8', '11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-000000000000', '0001-01-01 00:00:00', '0001-01-01 00:00:00');
 
 IF OBJECT_ID(N'gold_fact_deals', N'U') IS NOT NULL DROP TABLE [gold_fact_deals];
 CREATE TABLE [gold_fact_deals] (
@@ -341,15 +341,15 @@ CREATE TABLE [gold_fact_deals] (
     [amount] NUMERIC(18, 4) NULL,
     [currency_code] VARCHAR(255) NULL,
     [probability] INTEGER NULL,
-    [won_at] DATETIMEOFFSET NULL,
+    [won_at] DATETIME2(6) NULL,
     [lead_source] VARCHAR(255) NULL,
-    [created_at] DATETIMEOFFSET NOT NULL,
-    [updated_at] DATETIMEOFFSET NOT NULL,
-    PRIMARY KEY ([deal_key])
+    [created_at] DATETIME2(6) NOT NULL,
+    [updated_at] DATETIME2(6) NOT NULL
 );
+ALTER TABLE [gold_fact_deals] ADD CONSTRAINT [pk_gold_fact_deals] PRIMARY KEY NONCLUSTERED ([deal_key]) NOT ENFORCED;
 INSERT INTO [gold_fact_deals] ([deal_key], [tenant_id], [source_opportunity_id], [customer_key], [rep_key], [won_date_key], [created_date_key], [opportunity_name], [stage], [amount], [currency_code], [probability], [won_at], [lead_source], [created_at], [updated_at]) VALUES
-('5980aff6-fe3e-5a97-961b-84fef58f44e0', '11111111-1111-1111-1111-111111111111', '99999999-9999-9999-9999-999999999999', '5aa56cf9-e462-5acd-9c60-3f92ec76acdd', 'b7fcdf4c-38b0-56b6-b58f-530c9ebf5703', 20260921, 20260921, 'Deal A', 'won', 1000, 'USD', 100, '2026-09-21T12:00:00+00:00', NULL, '2026-09-21T12:00:00+00:00', '2026-09-21T12:00:00+00:00'),
-('5677407e-9ff9-5646-95d9-8315063ac77e', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'b045bc2f-7247-596b-a674-302e22b346bb', 'ae30f69e-2bb7-5329-9d33-92dc6d4ac7eb', 20260921, 20260921, 'Deal B', 'won', 2000, 'EUR', 100, '2026-09-21T12:00:00+00:00', NULL, '2026-09-21T12:00:00+00:00', '2026-09-21T12:00:00+00:00');
+('5980aff6-fe3e-5a97-961b-84fef58f44e0', '11111111-1111-1111-1111-111111111111', '99999999-9999-9999-9999-999999999999', '5aa56cf9-e462-5acd-9c60-3f92ec76acdd', 'b7fcdf4c-38b0-56b6-b58f-530c9ebf5703', 20260921, 20260921, 'Deal A', 'won', 1000, 'USD', 100, '2026-09-21 12:00:00', NULL, '2026-09-21 12:00:00', '2026-09-21 12:00:00'),
+('5677407e-9ff9-5646-95d9-8315063ac77e', '11111111-1111-1111-1111-111111111111', 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', 'b045bc2f-7247-596b-a674-302e22b346bb', 'ae30f69e-2bb7-5329-9d33-92dc6d4ac7eb', 20260921, 20260921, 'Deal B', 'won', 2000, 'EUR', 100, '2026-09-21 12:00:00', NULL, '2026-09-21 12:00:00', '2026-09-21 12:00:00');
 
 IF OBJECT_ID(N'gold_fact_revenue', N'U') IS NOT NULL DROP TABLE [gold_fact_revenue];
 CREATE TABLE [gold_fact_revenue] (
@@ -366,13 +366,13 @@ CREATE TABLE [gold_fact_revenue] (
     [payment_total] NUMERIC(18, 4) NULL,
     [payment_count] INTEGER NULL,
     [is_paid] BIT NULL,
-    [created_at] DATETIMEOFFSET NOT NULL,
-    [updated_at] DATETIMEOFFSET NOT NULL,
-    PRIMARY KEY ([revenue_key])
+    [created_at] DATETIME2(6) NOT NULL,
+    [updated_at] DATETIME2(6) NOT NULL
 );
+ALTER TABLE [gold_fact_revenue] ADD CONSTRAINT [pk_gold_fact_revenue] PRIMARY KEY NONCLUSTERED ([revenue_key]) NOT ENFORCED;
 INSERT INTO [gold_fact_revenue] ([revenue_key], [tenant_id], [source_invoice_id], [customer_key], [invoice_date_key], [due_date_key], [invoice_number], [status], [total], [currency_code], [payment_total], [payment_count], [is_paid], [created_at], [updated_at]) VALUES
-('90d94476-c0e1-58d2-a0c3-b8f63964fb01', '11111111-1111-1111-1111-111111111111', 'dddddddd-dddd-dddd-dddd-dddddddddddd', '5aa56cf9-e462-5acd-9c60-3f92ec76acdd', 20260115, 20260215, 'INV-001', 'approved', 550.0000, 'USD', 300.0000, 1, 0, '2026-09-21T12:00:00+00:00', '2026-09-21T12:00:00+00:00'),
-('087c0006-036d-5c98-9d44-accef64ef8aa', '11111111-1111-1111-1111-111111111111', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'b045bc2f-7247-596b-a674-302e22b346bb', 20260201, 20260301, 'INV-002', 'paid', 1200.0000, 'EUR', 0.0000, 0, 1, '2026-09-21T12:00:00+00:00', '2026-09-21T12:00:00+00:00');
+('90d94476-c0e1-58d2-a0c3-b8f63964fb01', '11111111-1111-1111-1111-111111111111', 'dddddddd-dddd-dddd-dddd-dddddddddddd', '5aa56cf9-e462-5acd-9c60-3f92ec76acdd', 20260115, 20260215, 'INV-001', 'approved', 550.0000, 'USD', 300.0000, 1, 0, '2026-09-21 12:00:00', '2026-09-21 12:00:00'),
+('087c0006-036d-5c98-9d44-accef64ef8aa', '11111111-1111-1111-1111-111111111111', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', 'b045bc2f-7247-596b-a674-302e22b346bb', 20260201, 20260301, 'INV-002', 'paid', 1200.0000, 'EUR', 0.0000, 0, 1, '2026-09-21 12:00:00', '2026-09-21 12:00:00');
 
 IF OBJECT_ID(N'gold_fact_pipeline', N'U') IS NOT NULL DROP TABLE [gold_fact_pipeline];
 CREATE TABLE [gold_fact_pipeline] (
@@ -388,10 +388,10 @@ CREATE TABLE [gold_fact_pipeline] (
     [currency_code] VARCHAR(255) NULL,
     [probability] INTEGER NULL,
     [days_in_stage] INTEGER NULL,
-    [created_at] DATETIMEOFFSET NOT NULL,
-    [updated_at] DATETIMEOFFSET NOT NULL,
-    PRIMARY KEY ([pipeline_key])
+    [created_at] DATETIME2(6) NOT NULL,
+    [updated_at] DATETIME2(6) NOT NULL
 );
+ALTER TABLE [gold_fact_pipeline] ADD CONSTRAINT [pk_gold_fact_pipeline] PRIMARY KEY NONCLUSTERED ([pipeline_key]) NOT ENFORCED;
 INSERT INTO [gold_fact_pipeline] ([pipeline_key], [tenant_id], [source_opportunity_id], [rep_key], [created_date_key], [expected_close_date_key], [opportunity_name], [stage], [amount], [currency_code], [probability], [days_in_stage], [created_at], [updated_at]) VALUES
-('526f2c1b-7463-5159-b63c-aca78454fba7', '11111111-1111-1111-1111-111111111111', 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'ded8f2fa-e743-5984-912d-949f212c7ec8', 20260921, NULL, 'Deal D', 'negotiation', 3000, 'USD', 60, 0, '2026-09-21T12:00:00+00:00', '2026-09-21T12:00:00+00:00');
+('526f2c1b-7463-5159-b63c-aca78454fba7', '11111111-1111-1111-1111-111111111111', 'cccccccc-cccc-cccc-cccc-cccccccccccc', 'ded8f2fa-e743-5984-912d-949f212c7ec8', 20260921, NULL, 'Deal D', 'negotiation', 3000, 'USD', 60, 0, '2026-09-21 12:00:00', '2026-09-21 12:00:00');
 

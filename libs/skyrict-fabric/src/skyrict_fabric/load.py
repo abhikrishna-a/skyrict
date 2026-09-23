@@ -140,7 +140,8 @@ def _tsql_type(annotation: Any) -> str:
     if annotation is Decimal:
         return "NUMERIC(18, 4)"
     if annotation is datetime:
-        return "DATETIMEOFFSET"
+        # Fabric Warehouse: datetimeoffset unsupported → datetime2(6)
+        return "DATETIME2(6)"
     if annotation is date:
         return "DATE"
     if annotation is bool:
@@ -159,13 +160,14 @@ def _tsql_literal(tsql_type: str, value: Any) -> str:
         return f"'{value}'"
     if tsql_type in ("NUMERIC(18, 4)", "INTEGER"):
         return str(value)
-    if tsql_type == "DATETIMEOFFSET":
-        text = str(value)
-        # gold.json is naive ISO; T-SQL datetimeoffset requires an offset
-        head, _, tail = text.partition("T")
-        if _ and "+" not in tail and not tail.endswith("Z"):
-            text = f"{head}T{tail}+00:00"
-        return f"'{text}'"
+    if tsql_type == "DATETIME2(6)":
+        # Fabric datetime2 rejects offsets; keep ISO wall-clock only
+        text = str(value).replace("T", " ")
+        if "+" in text:
+            text = text.split("+")[0]
+        if text.endswith("Z"):
+            text = text[:-1]
+        return f"'{text.strip()}'"
     if tsql_type == "DATE":
         return f"'{str(value)[:10]}'"
     return "'" + str(value).replace("'", "''") + "'"
@@ -175,7 +177,8 @@ def emit_tsql(gold: dict[str, list[dict[str, Any]]]) -> str:
     """Render gold.json as paste-able T-SQL for a Fabric Warehouse SQL endpoint.
 
     Hand-rolled DDL (not SQLAlchemy mssql compile) so integer PKs never become
-    IDENTITY and reserved column names (year/month/day) stay bracketed.
+    IDENTITY, reserved column names (year/month/day) stay bracketed, and PKs
+    are ALTERed in (Fabric rejects PRIMARY KEY inside CREATE TABLE, Msg 24584).
     """
     lines = [
         "-- SKY-118: load Gold star schema into Fabric Warehouse (T-SQL)",
@@ -200,9 +203,13 @@ def emit_tsql(gold: dict[str, list[dict[str, Any]]]) -> str:
         pk = fields[0][0]
         lines.append(f"IF OBJECT_ID(N'{name}', N'U') IS NOT NULL DROP TABLE [{name}];")
         lines.append(f"CREATE TABLE [{name}] (")
-        lines.append(",\n".join(col_defs) + ",")
-        lines.append(f"    PRIMARY KEY ([{pk}])")
+        lines.append(",\n".join(col_defs))
         lines.append(");")
+        # Fabric rejects PRIMARY KEY inside CREATE TABLE (Msg 24584)
+        lines.append(
+            f"ALTER TABLE [{name}] ADD CONSTRAINT [pk_{name}] "
+            f"PRIMARY KEY NONCLUSTERED ([{pk}]) NOT ENFORCED;"
+        )
         if rows:
             cols = ", ".join(col_names)
             # ponytail: 100 rows/statement stays under T-SQL VALUES limits

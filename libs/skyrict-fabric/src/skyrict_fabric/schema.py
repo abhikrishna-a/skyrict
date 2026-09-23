@@ -1,4 +1,5 @@
 """Pydantic models for Silver and Gold medallion tables."""
+
 from __future__ import annotations
 
 import uuid
@@ -27,12 +28,14 @@ __all__ = [
     "SilverSalesOrders",
 ]
 
+
 class SilverCurrencies(BaseModel):
     code: str = Field(..., max_length=3)
     name: str = Field(..., max_length=100)
     symbol: str = Field(default="", max_length=10)
     decimal_places: int = Field(default=2, ge=0, le=10)
     is_active: bool = True
+
 
 class SilverCrmLeads(BaseModel):
     tenant_id: uuid.UUID
@@ -48,6 +51,7 @@ class SilverCrmLeads(BaseModel):
     team_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
+
 
 class SilverCrmOpportunities(BaseModel):
     tenant_id: uuid.UUID
@@ -67,6 +71,7 @@ class SilverCrmOpportunities(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
 class SilverCrmCustomers(BaseModel):
     tenant_id: uuid.UUID
     id: uuid.UUID
@@ -80,6 +85,7 @@ class SilverCrmCustomers(BaseModel):
     source_opportunity_id: uuid.UUID | None = None
     created_at: datetime
     updated_at: datetime
+
 
 class SilverSalesOrders(BaseModel):
     tenant_id: uuid.UUID
@@ -96,6 +102,7 @@ class SilverSalesOrders(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
 class SilverSalesOrderLines(BaseModel):
     tenant_id: uuid.UUID
     id: uuid.UUID
@@ -109,6 +116,7 @@ class SilverSalesOrderLines(BaseModel):
     currency_code: str = "USD"
     created_at: datetime
     updated_at: datetime
+
 
 class SilverInvoices(BaseModel):
     tenant_id: uuid.UUID
@@ -129,6 +137,7 @@ class SilverInvoices(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
 class SilverPayments(BaseModel):
     tenant_id: uuid.UUID
     id: uuid.UUID
@@ -145,6 +154,7 @@ class SilverPayments(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
 class SilverJournalLines(BaseModel):
     tenant_id: uuid.UUID
     id: uuid.UUID
@@ -157,6 +167,7 @@ class SilverJournalLines(BaseModel):
     exchange_rate: Decimal = Decimal("1")
     created_at: datetime
     updated_at: datetime
+
 
 class SilverProducts(BaseModel):
     tenant_id: uuid.UUID
@@ -174,6 +185,7 @@ class SilverProducts(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
 class GoldDimCustomer(BaseModel):
     customer_key: uuid.UUID
     tenant_id: uuid.UUID
@@ -188,6 +200,7 @@ class GoldDimCustomer(BaseModel):
     source_opportunity_id: uuid.UUID | None = None
     first_seen_at: datetime
     last_updated_at: datetime
+
 
 class GoldDimProduct(BaseModel):
     product_key: uuid.UUID
@@ -204,6 +217,7 @@ class GoldDimProduct(BaseModel):
     first_seen_at: datetime
     last_updated_at: datetime
 
+
 class GoldDimDate(BaseModel):
     date_key: int = Field(..., description="YYYYMMDD integer")
     date_value: date
@@ -216,12 +230,14 @@ class GoldDimDate(BaseModel):
     is_weekend: bool
     fiscal_year: int | None = None
 
+
 class GoldDimRep(BaseModel):
     rep_key: uuid.UUID
     tenant_id: uuid.UUID
     source_owner_id: uuid.UUID
     first_seen_at: datetime
     last_updated_at: datetime
+
 
 class GoldFactDeals(BaseModel):
     deal_key: uuid.UUID
@@ -241,6 +257,7 @@ class GoldFactDeals(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+
 class GoldFactRevenue(BaseModel):
     revenue_key: uuid.UUID
     tenant_id: uuid.UUID
@@ -257,6 +274,7 @@ class GoldFactRevenue(BaseModel):
     is_paid: bool = False
     created_at: datetime
     updated_at: datetime
+
 
 class GoldFactPipeline(BaseModel):
     pipeline_key: uuid.UUID

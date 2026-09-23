@@ -35,6 +35,12 @@ def test_emit_tsql_covers_all_models() -> None:
         assert f"CREATE TABLE [{name}]" in sql, name
     # integer PK must not become IDENTITY (breaks explicit date_key inserts)
     assert "IDENTITY" not in sql
+    # Fabric: PRIMARY KEY only via ALTER TABLE (Msg 24584 in CREATE TABLE)
+    assert "PRIMARY KEY NONCLUSTERED" in sql
+    assert "NOT ENFORCED" in sql
+    assert "PRIMARY KEY (" not in sql.split("ALTER TABLE")[0]  # not inside first CREATE
+    for name in GOLD_MODELS:
+        assert f"ALTER TABLE [{name}] ADD CONSTRAINT [pk_{name}]" in sql, name
     # reserved date-dim columns stay bracketed
     for col in ("[year]", "[month]", "[day]", "[quarter]"):
         assert col in sql, col
@@ -48,8 +54,10 @@ def test_emit_tsql_literals() -> None:
     sql = emit_tsql(gold)
     deal = gold["gold_fact_deals"][0]
     assert f"'{deal['deal_key']}'" in sql
-    # naive ISO datetime gains a T-SQL offset
-    assert "'2026-09-21T12:00:00+00:00'" in sql
+    # Fabric datetime2(6): no offset suffix
+    assert "'2026-09-21 12:00:00'" in sql
+    assert "DATETIMEOFFSET" not in sql
+    assert "DATETIME2(6)" in sql
     # money stays an unquoted numeric literal
     assert "1000" in sql
     # NULL optional FK

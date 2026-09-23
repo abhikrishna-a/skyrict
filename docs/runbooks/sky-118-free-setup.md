@@ -95,8 +95,13 @@ sample queries match seeded totals."
 5. Open the Warehouse → **SQL analytics endpoint** (or **Open in SSMS /
    New query** in the portal query editor).
 6. Paste the entire contents of `fabric/samples/warehouse-load.sql` →
-   **Run**. Expect 7 `CREATE TABLE` + 9 `INSERT` batches, no errors.
-7. Paste `fabric/samples/parity-queries.sql` → **Run**. Expected results:
+   **Run**. Expect 7 `CREATE TABLE` + 7 `ALTER TABLE` PK + 9 `INSERT`
+   batches, no errors. Fabric Warehouse rejects `PRIMARY KEY` inside
+   `CREATE TABLE` (Msg 24584) and `datetimeoffset` columns (Msg 24574) —
+   `gold-tsql` already emits `PRIMARY KEY NONCLUSTERED ... NOT ENFORCED`
+   via ALTER and `DATETIME2(6)`; do not hand-edit those back.
+7. Paste `fabric/samples/parity-queries.sql` → **Run**. Switch the
+   **Result:** dropdown to step through all 10 result grids. Expected:
 
    | Query | Expected |
    | --- | --- |
@@ -107,8 +112,8 @@ sample queries match seeded totals."
    | unassigned rep (NIL UUID) | 1 |
    | deal_rows = distinct_deals = join_count | 2 = 2 = 2 |
 
-   Matching totals = DoD + BI-PBI-001 acceptance. Done — stop here if that
-   is all you need.
+   Matching totals = DoD + BI-PBI-001 acceptance. Verified live 2026-09-23
+   in workspace `skyrict-etl` / Warehouse `skyrict_warehouse`.
 
 ### 5b. Full path — run the notebooks inside Fabric
 
