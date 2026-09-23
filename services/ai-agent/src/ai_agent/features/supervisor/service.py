@@ -50,6 +50,10 @@ from ai_agent.features.supervisor.delegates import (
     RagSearchPort,
     SalesCoachDelegator,
 )
+from ai_agent.features.supervisor.permissions import (
+    AGENT_REQUIRED_PERMISSIONS,
+    permission_denied_message,
+)
 from ai_agent.features.supervisor.prompt_builder import StablePromptBuilder
 from ai_agent.features.supervisor.prompts import (
     ABSTENTION,
@@ -77,6 +81,7 @@ from ai_agent.features.supervisor.schemas import (
     SupervisorEvent,
     TokenEvent,
 )
+from ai_agent.graphs.security import grants_permission
 
 if TYPE_CHECKING:
     import uuid
@@ -235,6 +240,7 @@ class SupervisorService:
         conversation_summary: ConversationSummaryStore | None = None,
         summary_regenerator: Callable[[uuid.UUID, uuid.UUID], None] | None = None,
         provisioned: Mapping[str, bool],
+        granted_permissions: frozenset[str],
         confidence_threshold: float = 0.75,
         classification_cache: ResponseCache | None = None,
         response_cache: ResponseCache | None = None,
@@ -249,6 +255,11 @@ class SupervisorService:
         self._llm_router = llm_router
         self._confidence_threshold = confidence_threshold
         self._provisioned = dict(provisioned)
+        # The caller's effective grants, resolved ONCE per turn by the graph
+        # layer (which owns the session). The supervisor fails closed: a
+        # caller without the module's key is refused that leaf, and no caller
+        # ever receives a module's data through the general answer path.
+        self._granted_permissions = frozenset(granted_permissions)
         self._classification_cache = classification_cache
         self._response_cache = response_cache
         self._classification_cache_ttl_seconds = classification_cache_ttl_seconds
@@ -537,6 +548,23 @@ class SupervisorService:
             handled.append(agent)
             display_name = AGENT_DISPLAY_NAMES.get(agent, agent)
             yield AgentStartEvent(agent=agent, display_name=display_name)
+
+            # Caller-grant gate (authz hardening): the classification may have
+            # routed to a module the caller cannot read. Refuse that leaf with
+            # a clean message instead of delegating - the runtime resolved the
+            # caller's grants once per turn and the general supervisor answer
+            # never carries module data. This also protects provisioned-but-
+            # ungated leaves (e.g. coach/guardian) from being driven through
+            # the chat edge with only ``erp.ai.invoke``.
+            required = AGENT_REQUIRED_PERMISSIONS.get(agent)
+            if required is not None and not grants_permission(self._granted_permissions, required):
+                for event in _yield_text(
+                    agent=agent,
+                    text=permission_denied_message(display_name, self._granted_permissions),
+                ):
+                    yield event
+                yield CitationsEvent(agent=agent, citations=())
+                continue
 
             if not self._provisioned.get(agent, False):
                 for event in _yield_text(agent=agent, text=not_provisioned_message(display_name)):

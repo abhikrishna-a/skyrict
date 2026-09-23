@@ -11,6 +11,12 @@ Route contract (SKY-60 Q&A decision #6): registry rows are seeded by migration
 ``crm_assistant`` and ``finance_assistant`` start disabled so the supervisor
 streams a clean "not provisioned yet" abstention instead of erroring. Migrations
 flip those flags when the module backends land.
+
+Grant contract (SKY-60 authz hardening): the caller's effective grants are
+resolved once per turn from ``core_roles``/``core_user_roles`` and passed to the
+service, which refuses any module leaf the caller cannot read. ``agents:read``
+only shows the shell page; module data access follows the ERP permission the
+module's core reads require.
 """
 
 from __future__ import annotations
@@ -19,6 +25,7 @@ from typing import TYPE_CHECKING, Any
 
 from ai_agent.db.agent_registry_repository import AgentRegistryRepository
 from ai_agent.db.conversation_repository import ConversationRepository
+from ai_agent.db.permission_repository import PermissionRepository
 from ai_agent.features.conversation_summary import schedule_summary_regeneration
 from ai_agent.features.supervisor.schemas import (
     AGENT_AUDIT_GUARDIAN,
@@ -88,7 +95,7 @@ class _ConversationSummaryStore:
 
 
 class SupervisorRuntime:
-    """Resolves registry-provisioned leaves and streams one supervisor turn."""
+    """Resolves registry-provisioned leaves, caller grants, and streams one turn."""
 
     REGISTERED_AGENTS: tuple[str, ...] = (
         AGENT_INVENTORY,
@@ -120,6 +127,7 @@ class SupervisorRuntime:
         classification_cache_ttl_seconds: int = 300,
         response_cache_ttl_seconds: int = 300,
         tool_cache_ttl_seconds: int = 60,
+        resolve_permissions: Callable[[uuid.UUID, uuid.UUID], Awaitable[list[str]]] | None = None,
     ) -> None:
         self._session = session
         self._llm_router = llm_router
@@ -139,6 +147,19 @@ class SupervisorRuntime:
         self._classification_cache_ttl_seconds = classification_cache_ttl_seconds
         self._response_cache_ttl_seconds = response_cache_ttl_seconds
         self._tool_cache_ttl_seconds = tool_cache_ttl_seconds
+        # Caller-grant resolution (SKY-59 pattern): the graph layer owns the
+        # session, so grants for the current turn are resolved HERE and passed
+        # into the features-layer service, which stays db-free. Tests inject a
+        # stub; production reads the shared core RBAC projections.
+        self._resolve_permissions = resolve_permissions or self._default_resolve_permissions
+
+    async def _default_resolve_permissions(
+        self, user_id: uuid.UUID, tenant_id: uuid.UUID
+    ) -> list[str]:
+        """Resolve the caller's effective grants from the core RBAC projections."""
+        return await PermissionRepository(self._session).resolve_user_permissions(
+            user_id=user_id, tenant_id=tenant_id
+        )
 
     async def stream_answer(
         self,
@@ -149,8 +170,15 @@ class SupervisorRuntime:
         tenant_id: uuid.UUID,
         user_id: uuid.UUID,
     ) -> AsyncIterator[SupervisorEvent]:
-        """Stream one full turn; registry provisioned-state is read per turn."""
-        service = await self._build_service()
+        """Stream one full turn; registry provisioned-state is read per turn.
+
+        The caller's grants are resolved ONCE per turn and passed into the
+        service, which refuses any module leaf the caller lacks permission to
+        read. The chat edge still requires ``erp.ai.invoke``; module scoping
+        lives here, mirroring the per-tool scope of the SKY-59 runtime.
+        """
+        granted_permissions = frozenset(await self._resolve_permissions(user_id, tenant_id))
+        service = await self._build_service(granted_permissions=granted_permissions)
         async for event in service.stream_answer(
             query=query,
             attachments=attachments,
@@ -160,7 +188,7 @@ class SupervisorRuntime:
         ):
             yield event
 
-    async def _build_service(self) -> SupervisorService:
+    async def _build_service(self, *, granted_permissions: frozenset[str]) -> SupervisorService:
         repo = AgentRegistryRepository(self._session)
         provisioned = {name: await repo.get_enabled(name) for name in self.REGISTERED_AGENTS}
 
@@ -200,6 +228,7 @@ class SupervisorRuntime:
             conversation_summary=summary_store,
             summary_regenerator=_schedule_summary,
             provisioned=provisioned,
+            granted_permissions=granted_permissions,
             confidence_threshold=self._confidence_threshold,
             classification_cache=self._classification_cache,
             response_cache=self._response_cache,

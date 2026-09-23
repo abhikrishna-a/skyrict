@@ -20,6 +20,10 @@ from ai_agent.core.providers import LlmCompletion, LlmRequest
 from ai_agent.core.providers.base import LlmStreamChunk
 from ai_agent.features.nl_query.gateway import ProductRef, StockLevelRow
 from ai_agent.features.rag.retrieval.service import RetrievalItem, RetrievalResult
+from ai_agent.features.supervisor.permissions import (
+    accessible_agents,
+    permission_denied_message,
+)
 from ai_agent.features.supervisor.schemas import (
     AgentStartEvent,
     CitationsEvent,
@@ -29,9 +33,32 @@ from ai_agent.features.supervisor.schemas import (
     TokenEvent,
 )
 from ai_agent.features.supervisor.service import SupervisorService
+from ai_agent.graphs.security import (
+    PERM_AI_COACHING_READ,
+    PERM_AI_GUARDIAN_READ,
+    PERM_AI_INVOKE,
+    PERM_CRM_READ,
+    PERM_FINANCE_READ,
+    PERM_HR_AI_READ,
+    PERM_INVENTORY_READ,
+)
 
 TENANT_ID = uuid.uuid4()
 USER_ID = uuid.uuid4()
+
+# A caller granted every module the shell exposes keeps existing tests on the
+# full delegation path; permission-shaped tests pass restricted grant sets.
+_FULL_GRANTS = frozenset(
+    {
+        PERM_AI_INVOKE,
+        PERM_INVENTORY_READ,
+        PERM_HR_AI_READ,
+        PERM_CRM_READ,
+        PERM_FINANCE_READ,
+        PERM_AI_COACHING_READ,
+        PERM_AI_GUARDIAN_READ,
+    }
+)
 
 
 class FakeLlmRouter:
@@ -203,6 +230,7 @@ def make_service(
     coach_suggestions: FakeCoachSuggestions | None = None,
     guardian_reports: FakeGuardianReports | None = None,
     provisioned: dict[str, bool] | None = None,
+    granted_permissions: frozenset[str] | None = None,
     threshold: float = 0.75,
 ) -> SupervisorService:
     resolved_gateway = gateway or FakeGateway()
@@ -227,6 +255,7 @@ def make_service(
             "sales_coach": True,
             "audit_guardian": True,
         },
+        granted_permissions=granted_permissions or _FULL_GRANTS,
         confidence_threshold=threshold,
     )
 
@@ -490,6 +519,117 @@ async def test_stream_unprovisioned_module_streams_abstention() -> None:
     assert "not provisioned" in tokens_text(events, "crm_assistant")
     done = next(e for e in events if isinstance(e, DoneEvent))
     assert done.agents == ("crm_assistant",)
+
+
+# --- caller-grant gating ----------------------------------------------------
+
+
+async def test_permission_gate_refuses_inventory_for_crm_only_caller() -> None:
+    """A CRM-only caller never receives inventory data through the chat edge."""
+    service = make_service(
+        provisioned={"inventory_monitor": True},
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_CRM_READ}),
+    )
+
+    events = await collect(service, query="What stock is low?")
+
+    starts = [e for e in events if isinstance(e, AgentStartEvent)]
+    assert [e.agent for e in starts] == ["inventory_monitor"]
+    text = tokens_text(events, "inventory_monitor")
+    assert "don't have permission" in text.casefold()
+    # Steers to the caller's real grant scope - the premium guidance.
+    assert "CRM Assistant" in text
+    assert '"top customers"' in text
+    citations = [
+        e for e in events if isinstance(e, CitationsEvent) and e.agent == "inventory_monitor"
+    ]
+    assert citations[0].citations == ()
+    done = next(e for e in events if isinstance(e, DoneEvent))
+    assert done.agents == ("inventory_monitor",)
+
+
+async def test_permission_gate_refuses_hr_for_crm_only_caller() -> None:
+    """A CRM-only caller asking HR gets a refusal, not the HR delegate answer."""
+    service = make_service(
+        hr_copilot=FakeHrCopilot(answer="200 employees."),
+        provisioned={"hr_copilot": True},
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_CRM_READ}),
+    )
+
+    events = await collect(service, query="What is our headcount?")
+
+    text = tokens_text(events, "hr_copilot")
+    assert "don't have permission" in text.casefold()
+    assert "CRM Assistant" in text  # the accessible module is named
+    assert "200 employees." not in text  # the HR delegate never ran
+
+
+async def test_permission_gate_allows_granted_leaf() -> None:
+    """A caller holding the module's key still gets the full delegated answer."""
+    service = make_service(
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_INVENTORY_READ}),
+    )
+
+    events = await collect(service, query="What stock is low?")
+
+    text = tokens_text(events, "inventory_monitor")
+    assert "don't have permission" not in text.casefold()
+    assert text.strip()  # a real answer streamed, not a refusal
+
+
+async def test_permission_gate_with_no_module_grants_still_refuses() -> None:
+    """No module grants -> refusal names no agent and points to account access."""
+    service = make_service(
+        provisioned={"inventory_monitor": True},
+        granted_permissions=frozenset({PERM_AI_INVOKE}),
+    )
+
+    events = await collect(service, query="What stock is low?")
+
+    text = tokens_text(events, "inventory_monitor")
+    assert "don't have permission" in text.casefold()
+    assert "CRM Assistant" not in text  # no agent is accessible, none is named
+    assert "module your account can access" in text
+
+
+async def test_permission_gate_fan_out_streams_granted_leaf_and_refuses_denied() -> None:
+    """Cross-module questions stream the accessible leaf; the denied leaf refuses."""
+    service = make_service(
+        hr_copilot=FakeHrCopilot(answer="200 employees."),
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_INVENTORY_READ}),
+    )
+
+    events = await collect(service, query="Compare stock levels and headcount.")
+
+    starts = [e for e in events if isinstance(e, AgentStartEvent)]
+    assert [e.agent for e in starts] == ["inventory_monitor", "hr_copilot"]
+    inventory = tokens_text(events, "inventory_monitor")
+    hr = tokens_text(events, "hr_copilot")
+    assert "don't have permission" not in inventory.casefold()
+    assert "don't have permission" in hr.casefold()
+    done = next(e for e in events if isinstance(e, DoneEvent))
+    assert done.agents == ("inventory_monitor", "hr_copilot")
+
+
+def test_accessible_agents_are_derived_from_grants() -> None:
+    """The guide's accessible set follows the caller's grants, wildcard included."""
+    crm_only = accessible_agents(frozenset({PERM_AI_INVOKE, PERM_CRM_READ}))
+    assert crm_only == ("crm_assistant",)
+
+    # The wildcard owner grant satisfies every key; both resolve to the same
+    # registry-ordered set.
+    owner = accessible_agents(frozenset({"*"}))
+    assert owner == accessible_agents(_FULL_GRANTS)
+
+
+def test_permission_denied_message_names_denied_module_and_accessible_scope() -> None:
+    """The refusal names what was denied AND what the caller can ask instead."""
+    message = permission_denied_message(
+        "Finance Assistant", frozenset({PERM_AI_INVOKE, PERM_CRM_READ})
+    )
+    assert "don't have permission to ask about finance assistant" in message.casefold()
+    assert "CRM Assistant - try" in message
+    assert "Finance Assistant - try" not in message
 
 
 async def test_stream_multi_agent_sequential_segments() -> None:

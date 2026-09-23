@@ -34,6 +34,15 @@ from ai_agent.features.supervisor.schemas import (
     TokenEvent,
 )
 from ai_agent.features.supervisor.service import SupervisorService
+from ai_agent.graphs.security import (
+    PERM_AI_COACHING_READ,
+    PERM_AI_GUARDIAN_READ,
+    PERM_AI_INVOKE,
+    PERM_CRM_READ,
+    PERM_FINANCE_READ,
+    PERM_HR_AI_READ,
+    PERM_INVENTORY_READ,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable
@@ -41,6 +50,20 @@ if TYPE_CHECKING:
 TENANT_A = uuid.uuid4()
 TENANT_B = uuid.uuid4()
 USER_ID = uuid.uuid4()
+
+# Mirrors test_supervisor._FULL_GRANTS: existing cache tests exercise the full
+# delegation path; permission-scope tests pass restricted sets.
+_FULL_GRANTS = frozenset(
+    {
+        PERM_AI_INVOKE,
+        PERM_INVENTORY_READ,
+        PERM_HR_AI_READ,
+        PERM_CRM_READ,
+        PERM_FINANCE_READ,
+        PERM_AI_COACHING_READ,
+        PERM_AI_GUARDIAN_READ,
+    }
+)
 
 _CLASSIFY_ANSWER = '{"agents": ["inventory_monitor"], "confidence": 0.9}'
 _ABSTAIN_ANSWER = '{"agents": [], "confidence": 0.1}'
@@ -175,6 +198,7 @@ def make_service(
     conversation_summary: object | None = None,
     summary_regenerator: Callable[[uuid.UUID, uuid.UUID], None] | None = None,
     provisioned: dict[str, bool] | None = None,
+    granted_permissions: frozenset[str] | None = None,
 ) -> SupervisorService:
     gateway = FakeGateway()
 
@@ -188,6 +212,7 @@ def make_service(
         conversation_summary=conversation_summary,
         summary_regenerator=summary_regenerator,
         provisioned=provisioned or {"inventory_monitor": True},
+        granted_permissions=granted_permissions or _FULL_GRANTS,
         classification_cache=classification_cache,
         response_cache=response_cache,
         classification_cache_ttl_seconds=300,
