@@ -53,8 +53,8 @@ from ai_agent.features.supervisor.delegates import (
 )
 from ai_agent.features.supervisor.permissions import (
     AGENT_REQUIRED_PERMISSIONS,
-    _accessible_module_guide,
     abstention_message,
+    accessible_module_guide,
     greeting_message,
     permission_denied_message,
     supervisor_access_tail,
@@ -538,7 +538,7 @@ class SupervisorService:
                 # access the caller does not have (the reported hallucination).
                 for event in _yield_text(
                     agent="supervisor",
-                    text=_accessible_module_guide(self._granted_permissions),
+                    text=accessible_module_guide(self._granted_permissions),
                 ):
                     yield event
             else:
@@ -687,17 +687,20 @@ class SupervisorService:
                 yield event
             return
         try:
-            # The caller-scope line ALWAYS leads the general answer's prompt so
-            # the universal persona is grounded in the caller's real grants -
-            # it can never answer "what can I ask?" with modules the caller
-            # cannot read.
-            system_tail_parts = [supervisor_access_tail(self._granted_permissions)]
+            # The caller-scope line is ALWAYS the last system text, after any
+            # conversation history, so the scope constraint sits immediately
+            # above the user message and previously-injected history cannot
+            # erode it. It grounds the universal persona in the caller's real
+            # grants - the supervisor can never answer "what can I ask?" with
+            # modules the caller cannot read.
+            system_tail_parts = []
             if conversation_history:
                 system_tail_parts.append(
                     f"--- Conversation history ---\n"
                     f"{conversation_history}\n"
                     f"--- End of conversation history ---"
                 )
+            system_tail_parts.append(supervisor_access_tail(self._granted_permissions))
             system_tail = "\n\n".join(system_tail_parts)
             completion = await self._llm_router.complete(
                 _SUPERVISOR_ANSWER_BUILDER.build(

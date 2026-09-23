@@ -25,6 +25,7 @@ from ai_agent.features.supervisor.permissions import (
     permission_denied_message,
     supervisor_access_tail,
 )
+from ai_agent.features.supervisor.prompts import CLASSIFY_SYSTEM_PROMPT
 from ai_agent.features.supervisor.schemas import (
     AgentStartEvent,
     CitationsEvent,
@@ -783,6 +784,22 @@ async def test_greeting_with_no_grants_points_to_admin() -> None:
     assert "CRM Assistant" not in text
 
 
+async def test_greeting_with_wildcard_lists_all_accessible_modules() -> None:
+    """A tenant-owner (\"*\") caller is greeted with every module in registry
+    order - the wildcard grant must never regress the full-access greeting."""
+    service = make_service(
+        granted_permissions=frozenset({PERM_AI_INVOKE, "*"}),
+    )
+
+    events = await collect(service, query="hi")
+
+    text = tokens_text(events, "supervisor")
+    assert (
+        "I can help with Inventory Monitor, HR Copilot, CRM Assistant, "
+        "Finance Assistant, Sales Coach, and Audit Guardian"
+    ) in text
+
+
 async def test_supervisor_answer_injects_caller_scope_tail() -> None:
     """Every general answer's system prompt carries the caller's real scope,
     so the LLM cannot claim access the caller does not have."""
@@ -795,7 +812,12 @@ async def test_supervisor_answer_injects_caller_scope_tail() -> None:
     events = await collect(service, query="what are your opening hours?")
 
     assert "Some general answer." in tokens_text(events, "supervisor")
+    # The tail landed on the general-answer request, not the classifier: at
+    # least a classify (+ retry, for this query) and the answer call ran, and
+    # the FINAL request is the answer prompt - never the classifier.
+    assert router.complete_calls >= 2
     assert router.last_request is not None
+    assert router.last_request.system_prompt != CLASSIFY_SYSTEM_PROMPT
     assert "The caller's current module access: CRM Assistant" in router.last_request.system_prompt
     assert "Only help with modules the caller can access" in router.last_request.system_prompt
 

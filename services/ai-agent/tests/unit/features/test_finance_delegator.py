@@ -161,6 +161,32 @@ async def test_stream_refuses_without_finance_grant_and_never_queries_gateway() 
     assert router.calls == []
 
 
+async def test_stream_with_wildcard_grant_passes_the_gate() -> None:
+    """A wildcard (\"*\") caller is a tenant owner: the intrinsic gate must
+    PASS, so the fail-closed default never regresses the full-access path -
+    the gateway is constructed and no permission denial is emitted."""
+
+    constructed: list[bool] = []
+
+    async def spy_factory() -> FakeFinanceGateway:
+        constructed.append(True)
+        return FakeFinanceGateway()
+
+    router = FakeLlmRouter()
+    delegator = FinanceDelegator(
+        llm_router=router,
+        finance_gateway_factory=spy_factory,
+        granted_permissions=frozenset({PERM_AI_INVOKE, "*"}),
+    )
+
+    text = await collect(delegator, "net income")
+
+    # The gate passed: the gateway factory was reached and the refusal was not
+    # emitted (whichever legitimate answering path the query takes).
+    assert constructed == [True]
+    assert "You don't have permission to ask about Finance Assistant" not in text
+
+
 def _invoice(status: str = "issued", total: str = "100.0000", month: int = 8) -> InvoiceRef:
     return InvoiceRef(
         id=uuid.uuid4(),

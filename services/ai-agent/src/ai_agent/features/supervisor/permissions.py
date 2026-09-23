@@ -62,6 +62,14 @@ AGENT_QUERY_HINTS: dict[str, str] = {
     AGENT_AUDIT_GUARDIAN: "flagged activity or integrity reports",
 }
 
+# The single zero-grant sentence shared by every messaging channel. One
+# constant so the greeting, the no-provider fallback, and the module guide can
+# never drift apart in wording or punctuation.
+NO_MODULE_ACCESS_GUIDANCE = (
+    "Your account doesn't have access to any assistant modules yet — "
+    "contact your workspace admin to enable one."
+)
+
 
 def accessible_agents(granted_permissions: frozenset[str]) -> tuple[str, ...]:
     """Agent keys the caller can actually use, in registry order.
@@ -82,6 +90,8 @@ def accessible_module_names(granted_permissions: frozenset[str]) -> tuple[str, .
 
 def _natural_join(names: tuple[str, ...]) -> str:
     """Join display names the way a person would: 1, 2, and 3."""
+    if not names:
+        return ""
     if len(names) == 1:
         return names[0]
     if len(names) == 2:
@@ -89,7 +99,7 @@ def _natural_join(names: tuple[str, ...]) -> str:
     return ", ".join(names[:-1]) + f", and {names[-1]}"
 
 
-def _accessible_module_guide(granted_permissions: frozenset[str]) -> str:
+def accessible_module_guide(granted_permissions: frozenset[str]) -> str:
     """One natural sentence naming ONLY the modules the caller can use.
 
     Strictly grounded in the resolved grants: a caller who holds only
@@ -102,11 +112,8 @@ def _accessible_module_guide(granted_permissions: frozenset[str]) -> str:
     """
     agents = accessible_agents(granted_permissions)
     if not agents:
-        return (
-            "Your account doesn't have access to any assistant modules yet — "
-            "contact your workspace admin to enable one."
-        )
-    names = accessible_module_names(granted_permissions)
+        return NO_MODULE_ACCESS_GUIDANCE
+    names = tuple(AGENT_DISPLAY_NAMES[agent] for agent in agents)
     if len(agents) == 1:
         return f"Your access is scoped to {names[0]} — ask me about {AGENT_QUERY_HINTS[agents[0]]}."
     return f"You can ask me about {_natural_join(names)} — for example, {AGENT_QUERY_HINTS[agents[0]]}."
@@ -122,10 +129,7 @@ def greeting_message(granted_permissions: frozenset[str]) -> str:
     """
     names = accessible_module_names(granted_permissions)
     if not names:
-        return (
-            "Hey! I'm the Skyrict assistant. Your account doesn't have access "
-            "to any assistant modules yet - contact your workspace admin to enable one."
-        )
+        return f"Hey! I'm the Skyrict assistant. {NO_MODULE_ACCESS_GUIDANCE}"
     return (
         f"Hey! I'm the Skyrict assistant. I can help with {_natural_join(names)} "
         "- what would you like to know?"
@@ -136,10 +140,7 @@ def abstention_message(granted_permissions: frozenset[str]) -> str:
     """Grant-scoped fallback used when no LLM provider is reachable."""
     names = accessible_module_names(granted_permissions)
     if not names:
-        return (
-            "Your account doesn't have access to any assistant modules yet - "
-            "contact your workspace admin to enable one."
-        )
+        return NO_MODULE_ACCESS_GUIDANCE
     return f"I can help with {_natural_join(names)}."
 
 
@@ -173,8 +174,14 @@ def permission_denied_message(display_name: str, granted_permissions: frozenset[
     inventory or finance. Repeated identical asks get the same guidance on
     every turn (the supervisor is stateless; there is no separate "second
     refusal" state to track).
+
+    Naming the denied module is a deliberate trade-off: the caller's own query
+    triggered the routing, and the name always comes from the fixed display
+    registry (validated before the refusal), so the sentence can never invent
+    a surface. Swallowing the name would leave the caller confused about what
+    was denied.
     """
     return (
         f"You don't have permission to ask about {display_name}. "
-        f"{_accessible_module_guide(granted_permissions)}"
+        f"{accessible_module_guide(granted_permissions)}"
     )
