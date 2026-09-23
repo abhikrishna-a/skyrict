@@ -52,3 +52,12 @@ class MembershipRepositoryPort(Protocol):
         membership_id: str | uuid.UUID,
         role_id: str | uuid.UUID,
     ) -> Membership: ...
+
+    async def renew_invited(
+        self,
+        membership_id: str | uuid.UUID,
+        *,
+        role_id: str | uuid.UUID,
+        invited_by_user_id: str | uuid.UUID,
+        invited_at: datetime,
+    ) -> Membership: ...

@@ -66,6 +66,21 @@ class InvitationRepository(SqlRepository):
         model = result.scalar_one_or_none()
         return _from_orm(model) if model is not None else None
 
+    async def get_by_email(self, tenant_id: str | uuid.UUID, email: str) -> Invitation | None:
+        """Most recent invitation for an email in a tenant, in any state."""
+        stmt = (
+            select(InvitationModel)
+            .where(
+                InvitationModel.tenant_id == tenant_id,
+                InvitationModel.email.ilike(email),
+            )
+            .order_by(InvitationModel.created_at.desc())
+            .limit(1)
+        )
+        result = await self.session.execute(stmt)
+        model = result.scalar_one_or_none()
+        return _from_orm(model) if model is not None else None
+
     async def mark_used(
         self, invitation_id: str | uuid.UUID, user_id: str | uuid.UUID | None
     ) -> Invitation:

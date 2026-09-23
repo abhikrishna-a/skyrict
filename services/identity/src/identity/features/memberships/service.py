@@ -63,6 +63,30 @@ class MembershipService:
             )
         )
 
+    async def renew_invited(
+        self,
+        *,
+        membership_id: str | uuid.UUID,
+        role_id: str | uuid.UUID,
+        invited_by_user_id: str | uuid.UUID,
+    ) -> Membership:
+        """Refresh an INVITED membership so an expired invite can be re-sent.
+
+        Reuses the reservation row (one INVITED membership per email per
+        tenant) instead of creating a duplicate. Only a pending reservation
+        can be renewed - an ACTIVE/SUSPENDED membership is a real member and
+        must never be silently reactivated as a pending invite.
+        """
+        membership = await self._get(membership_id)
+        if membership.status is not MembershipStatus.INVITED:
+            raise ValidationError("Membership is not pending - cannot re-invite this email")
+        return await self.membership_repo.renew_invited(
+            membership_id,
+            role_id=role_id,
+            invited_by_user_id=invited_by_user_id,
+            invited_at=datetime.now(UTC),
+        )
+
     async def create_active(
         self,
         *,
