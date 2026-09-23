@@ -63,3 +63,16 @@ class RoleRepositoryPort(Protocol):
     ) -> None: ...
 
     async def count_users_with_role(self, tenant_id: str | uuid.UUID, role_name: str) -> int: ...
+
+
+class RbacRoleMirrorPort(Protocol):
+    """Best-effort Phase-1 bridge keeping core's ``core_roles`` projection current.
+
+    Identity owns role definitions; the core service enforces ERP grants from
+    its mirrored ``core_roles`` / ``core_user_roles`` tables. This port lets
+    the roles feature publish role-definition changes (create/edit) to that
+    mirror so added AND removed permissions take effect at request time - not
+    only on the next grant, invite accept, or core boot.
+    """
+
+    async def mirror_role(self, *, tenant_id: str | uuid.UUID, role: Role) -> None: ...

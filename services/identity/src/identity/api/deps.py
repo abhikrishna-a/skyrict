@@ -326,9 +326,10 @@ def get_authn_service(
 
 
 def get_roles_service(role_repo: RoleRepository = Depends(get_role_repo)) -> RoleManagementService:
+    from identity.features.roles.rbac_mirror import RbacRoleMirror
     from identity.features.roles.service import RoleManagementService
 
-    return RoleManagementService(role_repo)
+    return RoleManagementService(role_repo, rbac_mirror=RbacRoleMirror())
 
 
 def get_user_service(user_repo: UserRepository = Depends(get_user_repo)) -> UserService:

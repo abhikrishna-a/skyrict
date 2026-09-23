@@ -290,7 +290,9 @@ class InvitationService:
         ``core_roles`` / ``core_user_roles`` - would never see invitees. Both
         services share one database, so this writes the same upserts core's
         own ``apply_role_grants`` consumer handler performs (same composite-PK
-        shapes, same scope semantics: scope_id = tenant id).
+        shapes, same scope semantics: scope_id = tenant id). Permissions are
+        REPLACED on conflict (never merged), so a role edit that removed
+        permissions propagates to core on the next invite accept.
 
         Additionally binds the invited employee record: when exactly ONE
         non-terminated ``erp_employees`` row in the tenant carries the
@@ -312,17 +314,17 @@ class InvitationService:
                 await session.execute(
                     text(
                         "INSERT INTO core_roles (tenant_id, id, name, permissions, is_system_role) "
-                        "VALUES (:tid, :rid, :rname, :perms, true) "
+                        "VALUES (:tid, :rid, :rname, :perms, :sys) "
                         "ON CONFLICT (tenant_id, name) DO UPDATE SET "
-                        "permissions = (SELECT array_agg(DISTINCT p) FROM unnest("
-                        "core_roles.permissions || EXCLUDED.permissions) AS p), "
-                        "is_system_role = true, updated_at = now()"
+                        "permissions = EXCLUDED.permissions, "
+                        "is_system_role = EXCLUDED.is_system_role, updated_at = now()"
                     ),
                     {
                         "tid": tenant_id,
                         "rid": role_id,
                         "rname": role_name,
                         "perms": permissions,
+                        "sys": bool(getattr(role, "is_system_role", True)),
                     },
                 )
                 row = (
