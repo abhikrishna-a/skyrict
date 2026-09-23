@@ -18,6 +18,9 @@ Design decisions fixed in SKY-100:
 - **Fail-open** - a Redis blip degrades to a cache miss, never an error.
 - **Tenant-scoped keys** - the tenant UUID is always in the key so one
   tenant can never read another's cached answer.
+- **Permission-scoped keys** - the caller's grant set fingerprint is part of
+  response/tool keys so an answer or tool result computed for one role is
+  never served to a lesser-granted caller in the same tenant.
 - **Cachability rules** - LLM-only content is cacheable; tool results are
   cached only for deterministic read-only tools; agents that mix live data
   into their context (e.g. inventory) are never cached here (their RAG
@@ -34,7 +37,7 @@ import structlog
 
 if TYPE_CHECKING:
     import uuid
-    from collections.abc import Callable
+    from collections.abc import Callable, Iterable
 
     from redis.asyncio import Redis
 
@@ -62,6 +65,19 @@ def _digest(*parts: str) -> str:
     return digest.hexdigest()
 
 
+def permission_scope(granted: Iterable[str]) -> str:
+    """Deterministic token for one caller's grant set (cache-key component).
+
+    Grounded answers and deterministic tool results are cached per tenant;
+    without a permission component a figure computed for one role would be
+    served to a lesser-granted caller in the same tenant. The digest runs over
+    the SORTED grants so the token is order-independent, and the empty set
+    still yields a distinct token so a no-access caller never shares a key
+    with anyone.
+    """
+    return _digest("\x00".join(sorted(set(granted))))
+
+
 def classification_cache_key(tenant_id: uuid.UUID, query: str) -> str:
     """Key for one routing decision: tenant + query hash only."""
     return f"{_KEY_PREFIX_CLASSIFICATION}{tenant_id}:{_digest(query)}"
@@ -72,9 +88,16 @@ def response_cache_key(
     tenant_id: uuid.UUID,
     query: str,
     conversation_history: str = "",
+    scope: str = "",
 ) -> str:
-    """Key for one supervisor answer; history changes the prompt, so it keys."""
-    return f"{_KEY_PREFIX_RESPONSE}{tenant_id}:{_digest(query, conversation_history)}"
+    """Key for one supervisor answer; history changes the prompt, so it keys.
+
+    ``scope`` is the caller's :func:`permission_scope` token: an answer is
+    grounded in what the caller can read, so it must never be served to a
+    caller with a different grant set (default empty keeps legacy callers on
+    their existing keys).
+    """
+    return f"{_KEY_PREFIX_RESPONSE}{tenant_id}:{_digest(query, conversation_history, scope)}"
 
 
 def tool_cache_key(
@@ -82,9 +105,14 @@ def tool_cache_key(
     tenant_id: uuid.UUID,
     agent: str,
     parts: tuple[str, ...],
+    scope: str = "",
 ) -> str:
-    """Key for one deterministic tool result: agent + tenant + call parts."""
-    return f"{_KEY_PREFIX_TOOL}{agent}:{tenant_id}:{_digest(*parts)}"
+    """Key for one deterministic tool result: agent + tenant + call parts.
+
+    ``scope`` is the caller's :func:`permission_scope` token; see
+    :func:`response_cache_key`.
+    """
+    return f"{_KEY_PREFIX_TOOL}{agent}:{tenant_id}:{_digest(*parts, scope)}"
 
 
 class RedisResponseCache:

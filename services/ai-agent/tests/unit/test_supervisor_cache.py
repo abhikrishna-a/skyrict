@@ -225,6 +225,7 @@ def make_crm_delegate(
     router: FakeLlmRouter,
     gateway: FakeCrmGateway,
     tool_cache: MemoryResponseCache | None = None,
+    granted_permissions: frozenset[str] | None = None,
 ) -> CrmAssistantDelegator:
     async def gateway_factory() -> FakeCrmGateway:
         return gateway
@@ -235,6 +236,7 @@ def make_crm_delegate(
         memory_service=None,
         tool_cache=tool_cache,
         tool_cache_ttl_seconds=60,
+        granted_permissions=granted_permissions or _FULL_GRANTS,
     )
 
 
@@ -243,6 +245,7 @@ def make_finance_delegate(
     router: FakeLlmRouter,
     gateway: FakeFinanceGateway,
     tool_cache: MemoryResponseCache | None = None,
+    granted_permissions: frozenset[str] | None = None,
 ) -> FinanceDelegator:
     async def gateway_factory() -> FakeFinanceGateway:
         return gateway
@@ -252,6 +255,7 @@ def make_finance_delegate(
         finance_gateway_factory=gateway_factory,
         tool_cache=tool_cache,
         tool_cache_ttl_seconds=60,
+        granted_permissions=granted_permissions or _FULL_GRANTS,
     )
 
 
@@ -404,6 +408,40 @@ async def test_response_cache_expires_after_ttl() -> None:
     assert router.complete_calls == 4
 
 
+async def test_response_cache_is_permission_scoped() -> None:
+    """An answer cached for one role is never served to a different one.
+
+    The classification cache stays shared (routing is data-free), but the
+    response cache key includes the caller's permission fingerprint: a
+    CRM-only caller must re-answer even after the same tenant's full-grant
+    caller warmed the identical query, and its own answer then caches under
+    its own scope.
+    """
+    router = FakeLlmRouter(classify_text=_ABSTAIN_ANSWER)
+    shared = MemoryResponseCache()
+    full = make_service(
+        router=router,
+        classification_cache=shared,
+        response_cache=shared,
+    )
+    crm_only = make_service(
+        router=router,
+        classification_cache=shared,
+        response_cache=shared,
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_CRM_READ}),
+    )
+
+    await collect(full, "tell me about multi-turn planning")
+    await collect(full, "tell me about multi-turn planning")
+    assert router.complete_calls == 2  # the full-grant role is fully cached
+
+    await collect(crm_only, "tell me about multi-turn planning")
+    assert router.complete_calls == 3  # classify hit, but the answer re-computed
+
+    await collect(crm_only, "tell me about multi-turn planning")
+    assert router.complete_calls == 3  # the crm-only role now has its own entry
+
+
 async def test_response_cache_never_engages_for_images() -> None:
     router = FakeLlmRouter(classify_text=_ABSTAIN_ANSWER)
     service = make_service(router=router, response_cache=MemoryResponseCache())
@@ -532,6 +570,52 @@ async def test_crm_nl_action_cached_per_tenant() -> None:
     assert gateway.list_leads_calls == 1
 
 
+async def test_crm_nl_action_cached_per_permission_scope() -> None:
+    """A deterministic count cached under one role must not leak to another.
+
+    The CRM NL action is a read-only aggregation over data the acting user
+    may view; the tool-cache key therefore includes the caller's grant
+    fingerprint so a caller without erp.crm.read can never reuse a cached
+    count computed for a CRM-granted role.
+    """
+    gateway = FakeCrmGateway()
+    shared = MemoryResponseCache()
+    wide = make_crm_delegate(
+        router=FakeLlmRouter(),
+        gateway=gateway,
+        tool_cache=shared,
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_CRM_READ}),
+    )
+    narrow = make_crm_delegate(
+        router=FakeLlmRouter(),
+        gateway=gateway,
+        tool_cache=shared,
+        granted_permissions=frozenset({PERM_AI_INVOKE}),
+    )
+    citations: list[object] = []
+
+    async def question(delegate: CrmAssistantDelegator) -> str:
+        deltas = [
+            delta
+            async for delta in delegate.stream(
+                query="how many leads",
+                tenant_id=TENANT_A,
+                user_id=USER_ID,
+                citations=citations,
+            )
+        ]
+        return "".join(deltas)
+
+    assert "2 leads" in await question(wide)
+    assert gateway.list_leads_calls == 1
+    assert "2 leads" in await question(wide)
+    assert gateway.list_leads_calls == 1  # wide role's entry reused
+
+    assert "2 leads" in await question(narrow)
+    # The narrower role performs its own gateway read - no cached-leak.
+    assert gateway.list_leads_calls == 2
+
+
 async def test_crm_nl_action_not_cached_without_tool_cache() -> None:
     gateway = FakeCrmGateway()
     delegate = make_crm_delegate(router=FakeLlmRouter(), gateway=gateway)
@@ -575,6 +659,44 @@ async def test_finance_deterministic_cached_per_tenant() -> None:
 
     await delegate._try_deterministic("show the invoice totals", tenant_id=TENANT_B)
 
+    assert gateway.list_invoices_calls == 2
+
+
+async def test_finance_deterministic_cached_per_permission_scope() -> None:
+    """A deterministic finance figure cached under one role must not leak.
+
+    The finance summary is a read-only aggregation over data the acting user
+    may view; the tool-cache key includes the caller's grant fingerprint so a
+    caller without erp.finance.read can never reuse a figure computed for a
+    finance-granted role in the same tenant.
+    """
+    gateway = FakeFinanceGateway()
+    shared = MemoryResponseCache()
+    wide = make_finance_delegate(
+        router=FakeLlmRouter(),
+        gateway=gateway,
+        tool_cache=shared,
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_FINANCE_READ}),
+    )
+    narrow = make_finance_delegate(
+        router=FakeLlmRouter(),
+        gateway=gateway,
+        tool_cache=shared,
+        granted_permissions=frozenset({PERM_AI_INVOKE}),
+    )
+
+    async def summary(delegate: FinanceDelegator) -> str | None:
+        return await delegate._try_deterministic("show the invoice totals", tenant_id=TENANT_A)
+
+    first = await summary(wide)
+    second = await summary(wide)
+    assert first == second
+    assert "3 invoices" in first
+    assert gateway.list_invoices_calls == 1  # wide role's entry reused
+
+    narrow_answer = await summary(narrow)
+    assert "3 invoices" in narrow_answer
+    # The narrower role performs its own gateway read - no cached-leak.
     assert gateway.list_invoices_calls == 2
 
 

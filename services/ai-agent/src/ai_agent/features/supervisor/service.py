@@ -30,6 +30,7 @@ import structlog
 from ai_agent.cache.response_cache import (
     ResponseCache,
     classification_cache_key,
+    permission_scope,
     response_cache_key,
 )
 from ai_agent.core.exceptions import AiRateLimitError, AiUnavailableError
@@ -260,6 +261,10 @@ class SupervisorService:
         # caller without the module's key is refused that leaf, and no caller
         # ever receives a module's data through the general answer path.
         self._granted_permissions = frozenset(granted_permissions)
+        # Cache keys are scoped by the caller's grant fingerprint: an answer
+        # grounded in one role's data must never be served from cache to a
+        # lesser-granted caller in the same tenant (V2 of the authz audit).
+        self._permission_scope = permission_scope(self._granted_permissions)
         self._classification_cache = classification_cache
         self._response_cache = response_cache
         self._classification_cache_ttl_seconds = classification_cache_ttl_seconds
@@ -286,6 +291,7 @@ class SupervisorService:
                 memory_service=memory_service,
                 tool_cache=tool_cache,
                 tool_cache_ttl_seconds=tool_cache_ttl_seconds,
+                granted_permissions=self._granted_permissions,
             )
         if finance_gateway_factory is not None:
             delegates[AGENT_FINANCE] = FinanceDelegator(
@@ -293,6 +299,7 @@ class SupervisorService:
                 finance_gateway_factory=finance_gateway_factory,
                 tool_cache=tool_cache,
                 tool_cache_ttl_seconds=tool_cache_ttl_seconds,
+                granted_permissions=self._granted_permissions,
             )
         if coach_suggestions is not None:
             delegates[AGENT_SALES_COACH] = SalesCoachDelegator(
@@ -649,6 +656,7 @@ class SupervisorService:
                 tenant_id=tenant_id,
                 query=query.strip(),
                 conversation_history=conversation_history,
+                scope=self._permission_scope,
             )
             cached = await self._response_cache.get(cache_key)
             if cached:

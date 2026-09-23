@@ -10,6 +10,7 @@ from ai_agent.cache.response_cache import (
     MemoryResponseCache,
     RedisResponseCache,
     classification_cache_key,
+    permission_scope,
     response_cache_key,
     tool_cache_key,
 )
@@ -75,6 +76,41 @@ class TestKeys:
         assert base != other_agent
         assert base != other_args
         assert base.startswith("ai:tool:finance_assistant:")
+
+    def test_permission_scope_tokens_are_distinct(self) -> None:
+        empty = permission_scope(())
+        crm_only = permission_scope(("erp.crm.read",))
+
+        assert empty != crm_only
+        assert crm_only != permission_scope(("erp.crm.read", "erp.finance.read"))
+
+    def test_permission_scope_is_order_independent(self) -> None:
+        first = permission_scope(("erp.crm.read", "erp.finance.read"))
+        second = permission_scope(("erp.finance.read", "erp.crm.read"))
+
+        assert first == second
+
+    def test_permission_scope_ignores_duplicates(self) -> None:
+        one = permission_scope(("erp.crm.read", "erp.crm.read", "erp.finance.read"))
+        two = permission_scope(("erp.crm.read", "erp.finance.read"))
+
+        assert one == two
+
+    def test_response_key_includes_permission_scope(self) -> None:
+        plain = response_cache_key(tenant_id=TENANT_A, query="hi")
+        scoped = response_cache_key(tenant_id=TENANT_A, query="hi", scope="scope-a")
+        other_scope = response_cache_key(tenant_id=TENANT_A, query="hi", scope="scope-b")
+
+        assert plain != scoped
+        assert scoped != other_scope
+
+    def test_tool_key_includes_permission_scope(self) -> None:
+        plain = tool_cache_key(tenant_id=TENANT_A, agent="finance_assistant", parts=("invoice",))
+        scoped = tool_cache_key(
+            tenant_id=TENANT_A, agent="finance_assistant", parts=("invoice",), scope="scope-a"
+        )
+
+        assert plain != scoped
 
 
 class TestRedisResponseCache:

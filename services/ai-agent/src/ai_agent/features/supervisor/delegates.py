@@ -31,7 +31,11 @@ from typing import TYPE_CHECKING, ClassVar, Protocol
 
 import structlog
 
-from ai_agent.cache.response_cache import ResponseCache, tool_cache_key
+from ai_agent.cache.response_cache import (
+    ResponseCache,
+    permission_scope,
+    tool_cache_key,
+)
 from ai_agent.core.exceptions import AiUnavailableError
 from ai_agent.core.providers import LlmRequest
 from ai_agent.features.finance_intents import match_finance_intent, run_finance_intent
@@ -432,12 +436,16 @@ class CrmAssistantDelegator:
         memory_service: MemoryService | None = None,
         tool_cache: ResponseCache | None = None,
         tool_cache_ttl_seconds: int = 60,
+        granted_permissions: frozenset[str] = frozenset(),
     ) -> None:
         self._llm_router = llm_router
         self._crm_gateway_factory = crm_gateway_factory
         self._memory = memory_service
         self._tool_cache = tool_cache
         self._tool_cache_ttl_seconds = tool_cache_ttl_seconds
+        # Deterministic NL actions are cached per permission set: a figure
+        # computed under one role must never be served to a different one.
+        self._permission_scope = permission_scope(granted_permissions)
 
     async def stream(
         self,
@@ -643,6 +651,7 @@ class CrmAssistantDelegator:
                 tenant_id=tenant_id,
                 agent=self.key,
                 parts=(action, entity_type or "", query),
+                scope=self._permission_scope,
             )
             cached = await self._tool_cache.get(cache_key)
             if cached is not None:
@@ -719,11 +728,15 @@ class FinanceDelegator:
         finance_gateway_factory: Callable[[], Awaitable[FinanceGatewayPort]],
         tool_cache: ResponseCache | None = None,
         tool_cache_ttl_seconds: int = 60,
+        granted_permissions: frozenset[str] = frozenset(),
     ) -> None:
         self._llm_router = llm_router
         self._finance_gateway_factory = finance_gateway_factory
         self._tool_cache = tool_cache
         self._tool_cache_ttl_seconds = tool_cache_ttl_seconds
+        # Deterministic summaries are cached per permission set: a figure
+        # computed under one role must never be served to a different one.
+        self._permission_scope = permission_scope(granted_permissions)
 
     async def stream(
         self,
@@ -871,6 +884,7 @@ class FinanceDelegator:
                 tenant_id=tenant_id,
                 agent=self.key,
                 parts=(query,),
+                scope=self._permission_scope,
             )
             cached = await self._tool_cache.get(cache_key)
             if cached is not None:
