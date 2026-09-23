@@ -206,7 +206,11 @@ allow_indirect_imports = true
 ignore_imports = [
     "identity.features.**.repository -> identity.models.**",
     "identity.features.**.repository -> identity.db.**",
+    # Sanctioned cross-DB bridges: identity features that keep core's
+    # projections current (core_roles / core_user_roles) over the shared
+    # database. rbac_mirror is the invitation-accept pattern for role edits.
     "identity.features.invitations.service -> identity.db.session",
+    "identity.features.roles.rbac_mirror -> identity.db.session",
 ]
 
 [[tool.importlinter.contracts]]
