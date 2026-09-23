@@ -41,10 +41,19 @@ import {
     renameConversation,
     setConversationPinned,
 } from "@/lib/api/agents-api";
+import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 import { useSession } from "@/lib/auth/session";
 import { CONVERSATION_LIST_CHANGED_EVENT } from "@/lib/chat/conversation-list-events";
 import { cn } from "@/lib/utils";
 import type { Conversation } from "@/lib/api/agents-api";
+
+/**
+ * Route keys for the AI feature rows. They mirror the route map
+ * (`resolveRoutePermission("/agents/coaching"|"/agents/guardian")`), which
+ * `route-permissions.test.ts` pins for exactly this reason.
+ */
+const AGENTS_COACHING_PERMISSION = "erp.ai.coaching.read";
+const AGENTS_GUARDIAN_PERMISSION = "erp.ai.guardian.read";
 
 function isActive(pathname: string, id: string): boolean {
     const normalized =
@@ -223,9 +232,22 @@ export function AgentsChatSidebar({
     const pathname = usePathname();
     const router = useRouter();
     const { status } = useSession();
+    const { status: accessStatus, permissions } = useModuleAccess();
     const [conversations, setConversations] = useState<Conversation[]>([]);
     const [renameTarget, setRenameTarget] = useState<Conversation | null>(null);
     const [renameValue, setRenameValue] = useState("");
+
+    // AI-feature rows carry their own keys on top of the `agents:read` world
+    // gate, so a chat user without them must not see the rows at all (clicking
+    // through to a redirect is the bug this prevents). Fail closed while the
+    // permission set is unresolved.
+    const canUseCoaching =
+        accessStatus === "ready" &&
+        hasPermission(permissions, AGENTS_COACHING_PERMISSION);
+    const canUseGuardian =
+        accessStatus === "ready" &&
+        hasPermission(permissions, AGENTS_GUARDIAN_PERMISSION);
+    const showAiFeatures = canUseCoaching || canUseGuardian;
 
     const load = useCallback(() => {
         getConversations()
@@ -353,114 +375,122 @@ export function AgentsChatSidebar({
                         onNavigate={onCloseMobile}
                     />
 
-                    {collapsed ? (
-                        /* Collapsed sidebar: AI feature icons with dropdown lists */
-                        <nav className="space-y-1" aria-label="AI features">
-                            <button
-                                type="button"
-                                title="Sales Coach"
-                                onClick={() => {
-                                    onCloseMobile();
-                                    router.push("/agents/coaching");
-                                }}
-                                aria-current={
-                                    pathname ===
-                                    "/agents/coaching"
-                                        ? "page"
-                                        : undefined
-                                }
-                                className={cn(
-                                    "flex w-full items-center justify-center rounded-lg px-0 py-2 transition-colors hover:bg-muted/60",
-                                    pathname ===
-                                        "/agents/coaching"
-                                        ? "text-foreground"
-                                        : "text-muted-foreground hover:text-foreground",
-                                )}
-                            >
-                                <AiGlyph
-                                    aria-hidden="true"
-                                    className="size-4"
-                                />
-                            </button>
-                            <button
-                                type="button"
-                                title="Audit Guardian"
-                                onClick={() => {
-                                    onCloseMobile();
-                                    router.push("/agents/guardian");
-                                }}
-                                aria-current={
-                                    pathname ===
-                                    "/agents/guardian"
-                                        ? "page"
-                                        : undefined
-                                }
-                                className={cn(
-                                    "flex w-full items-center justify-center rounded-lg px-0 py-2 transition-colors hover:bg-muted/60",
-                                    pathname ===
-                                        "/agents/guardian"
-                                        ? "text-foreground"
-                                        : "text-muted-foreground hover:text-foreground",
-                                )}
-                            >
-                                <ShieldCheck
-                                    aria-hidden="true"
-                                    className="size-4"
-                                />
-                            </button>
-                        </nav>
-                    ) : (
-                        /* Expanded sidebar: AI feature links */
-                        <nav className="space-y-1" aria-label="AI features">
-                            <p className="mb-2 px-2.5 text-[11px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
-                                AI features
-                            </p>
-                            <Link
-                                href="/agents/coaching"
-                                onClick={onCloseMobile}
-                                aria-current={
-                                    pathname ===
-                                    "/agents/coaching"
-                                        ? "page"
-                                        : undefined
-                                }
-                                className={cn(
-                                    "flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted/60",
-                                    pathname ===
-                                        "/agents/coaching" &&
-                                        "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
-                                )}
-                            >
-                                <AiGlyph
-                                    aria-hidden="true"
-                                    className="size-4 shrink-0"
-                                />
-                                Sales Coach
-                            </Link>
-                            <Link
-                                href="/agents/guardian"
-                                onClick={onCloseMobile}
-                                aria-current={
-                                    pathname ===
-                                    "/agents/guardian"
-                                        ? "page"
-                                        : undefined
-                                }
-                                className={cn(
-                                    "flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted/60",
-                                    pathname ===
-                                        "/agents/guardian" &&
-                                        "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
-                                )}
-                            >
-                                <ShieldCheck
-                                    aria-hidden="true"
-                                    className="size-4 shrink-0"
-                                />
-                                Audit Guardian
-                            </Link>
-                        </nav>
-                    )}
+                    {collapsed
+                        ? showAiFeatures && (
+                              /* Collapsed sidebar: AI feature icons */
+                              <nav
+                                  className="space-y-1"
+                                  aria-label="AI features"
+                              >
+                                  {canUseCoaching ? (
+                                      <button
+                                          type="button"
+                                          title="Sales Coach"
+                                          onClick={() => {
+                                              onCloseMobile();
+                                              router.push("/agents/coaching");
+                                          }}
+                                          aria-current={
+                                              pathname === "/agents/coaching"
+                                                  ? "page"
+                                                  : undefined
+                                          }
+                                          className={cn(
+                                              "flex w-full items-center justify-center rounded-lg px-0 py-2 transition-colors hover:bg-muted/60",
+                                              pathname === "/agents/coaching"
+                                                  ? "text-foreground"
+                                                  : "text-muted-foreground hover:text-foreground",
+                                          )}
+                                      >
+                                          <AiGlyph
+                                              aria-hidden="true"
+                                              className="size-4"
+                                          />
+                                      </button>
+                                  ) : null}
+                                  {canUseGuardian ? (
+                                      <button
+                                          type="button"
+                                          title="Audit Guardian"
+                                          onClick={() => {
+                                              onCloseMobile();
+                                              router.push("/agents/guardian");
+                                          }}
+                                          aria-current={
+                                              pathname === "/agents/guardian"
+                                                  ? "page"
+                                                  : undefined
+                                          }
+                                          className={cn(
+                                              "flex w-full items-center justify-center rounded-lg px-0 py-2 transition-colors hover:bg-muted/60",
+                                              pathname === "/agents/guardian"
+                                                  ? "text-foreground"
+                                                  : "text-muted-foreground hover:text-foreground",
+                                          )}
+                                      >
+                                          <ShieldCheck
+                                              aria-hidden="true"
+                                              className="size-4"
+                                          />
+                                      </button>
+                                  ) : null}
+                              </nav>
+                          ) :
+                          showAiFeatures && (
+                              /* Expanded sidebar: AI feature links */
+                              <nav
+                                  className="space-y-1"
+                                  aria-label="AI features"
+                              >
+                                  <p className="mb-2 px-2.5 text-[11px] font-semibold tracking-wider text-muted-foreground/80 uppercase">
+                                      AI features
+                                  </p>
+                                  {canUseCoaching ? (
+                                      <Link
+                                          href="/agents/coaching"
+                                          onClick={onCloseMobile}
+                                          aria-current={
+                                              pathname === "/agents/coaching"
+                                                  ? "page"
+                                                  : undefined
+                                          }
+                                          className={cn(
+                                              "flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted/60",
+                                              pathname === "/agents/coaching" &&
+                                                  "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
+                                          )}
+                                      >
+                                          <AiGlyph
+                                              aria-hidden="true"
+                                              className="size-4 shrink-0"
+                                          />
+                                          Sales Coach
+                                      </Link>
+                                  ) : null}
+                                  {canUseGuardian ? (
+                                      <Link
+                                          href="/agents/guardian"
+                                          onClick={onCloseMobile}
+                                          aria-current={
+                                              pathname === "/agents/guardian"
+                                                  ? "page"
+                                                  : undefined
+                                          }
+                                          className={cn(
+                                              "flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-foreground transition-colors hover:bg-muted/60",
+                                              pathname === "/agents/guardian" &&
+                                                  "bg-sidebar-accent font-medium text-sidebar-accent-foreground",
+                                          )}
+                                      >
+                                          <ShieldCheck
+                                              aria-hidden="true"
+                                              className="size-4 shrink-0"
+                                          />
+                                          Audit Guardian
+                                      </Link>
+                                  ) : null}
+                              </nav>
+                      )}
 
                     {collapsed ? (
                         /* Collapsed sidebar: category icons with dropdown lists */

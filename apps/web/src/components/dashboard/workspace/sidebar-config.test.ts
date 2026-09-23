@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import {
     erpNavGroups,
+    filterNavGroupsByPermissions,
+    filterNavItemsByPermissions,
     isSidebarItemActive,
     workspaceAccountItems,
     workspaceNavGroups,
+    type NavGroup,
 } from "@/components/dashboard/workspace/sidebar-config";
 import { resolveRoutePermission } from "@/lib/access/route-permissions";
 
@@ -263,5 +266,111 @@ describe("ERP nav permissions resolve through route-permissions", () => {
                 item.permission,
             );
         }
+    });
+});
+
+/* ---------- Permission-aware navigation (dynamic RBAC) ---------- */
+
+describe("permission-aware sidebar", () => {
+    const INVITE_ONLY = ["invitations:send"];
+    const CRM_READ = ["erp.crm.read"];
+
+    function navLabels(groups: NavGroup[]): string[] {
+        return groups.flatMap((group) =>
+            group.items.flatMap((item) => [
+                item.label,
+                ...(item.children ?? []).map((child) => child.label),
+            ]),
+        );
+    }
+
+    it("shows an invitation-only user no ERP module, group or child row", () => {
+        // The reported bug: a user holding only the invitation key still saw
+        // CRM, Orders, Inventory, HR, AI Insights, Search, ... in the sidebar.
+        //
+        // The ERP shell is additionally world-gated (ModuleAccessBoundary denies
+        // `erp` outright for a user with no `erp.*` key), so this filter's job is
+        // to prove every module/area/child row is permission-driven. The one
+        // ungated row left is the world's own landing page, which only exists
+        // behind the world gate.
+        const labels = navLabels(
+            filterNavGroupsByPermissions(erpNavGroups, INVITE_ONLY),
+        );
+        for (const hidden of [
+            "CRM",
+            "Leads",
+            "Opportunities",
+            "AI Insights",
+            "Search",
+            "Orders",
+            "Inventory",
+            "Suppliers",
+            "Employees",
+            "Payroll",
+            "Finance",
+            "Documents",
+            "Reports",
+        ]) {
+            expect(labels, hidden).not.toContain(hidden);
+        }
+        expect(labels).toEqual(["Dashboard"]);
+
+        const workspaceLabels = navLabels(
+            filterNavGroupsByPermissions(workspaceNavGroups, INVITE_ONLY),
+        );
+        expect(workspaceLabels).not.toContain("Roles");
+        expect(workspaceLabels).toContain("Overview");
+
+        const accountLabels = filterNavItemsByPermissions(
+            workspaceAccountItems,
+            INVITE_ONLY,
+        ).map((item) => item.label);
+        // Invitation capability survives the fix.
+        expect(accountLabels).toEqual(["Invite team", "Settings"]);
+    });
+
+    it("shows a CRM-read user the CRM subtree only", () => {
+        const groups = filterNavGroupsByPermissions(erpNavGroups, CRM_READ);
+        const labels = navLabels(groups);
+
+        expect(labels).toContain("CRM");
+        expect(labels).toContain("Leads");
+        // Areas the user has no key for stay hidden, parents included.
+        expect(labels).not.toContain("Payroll");
+        expect(labels).not.toContain("Employees");
+        expect(labels).not.toContain("Finance");
+        expect(labels).not.toContain("Documents");
+        expect(labels).not.toContain("Reports");
+    });
+
+    it("keeps empty groups out of the rendered nav", () => {
+        for (const group of filterNavGroupsByPermissions(
+            erpNavGroups,
+            INVITE_ONLY,
+        )) {
+            expect(group.items.length).toBeGreaterThan(0);
+        }
+    });
+
+    it("grants every row to the wildcard", () => {
+        const all = navLabels(filterNavGroupsByPermissions(erpNavGroups, ["*"]));
+        const filtered = navLabels(
+            filterNavGroupsByPermissions(erpNavGroups, CRM_READ),
+        );
+        expect(all.length).toBeGreaterThan(filtered.length);
+        expect(all).toContain("Payroll");
+    });
+
+    it("hides nothing on the workspace shell for a wildcard holder", () => {
+        const labels = navLabels(
+            filterNavGroupsByPermissions(workspaceNavGroups, ["*"]),
+        );
+        expect(labels).toContain("Roles");
+
+        const accountLabels = filterNavItemsByPermissions(
+            workspaceAccountItems,
+            ["*"],
+        ).map((item) => item.label);
+        expect(accountLabels).toEqual(["Invite team", "Members", "Settings"]);
     });
 });

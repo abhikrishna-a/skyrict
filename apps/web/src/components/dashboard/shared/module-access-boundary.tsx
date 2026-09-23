@@ -7,15 +7,8 @@ import { ShieldAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import {
-    hasPermission,
-    useModuleAccess,
-    type ModuleKey,
-} from "@/lib/access/modules";
-import {
-    deniedFallback,
-    resolveRoutePermission,
-} from "@/lib/access/route-permissions";
+import { useModuleAccess, type ModuleKey } from "@/lib/access/modules";
+import { resolveAccessDecision } from "@/lib/access/route-permissions";
 
 /** Minimal loading indicator while permissions resolve or a redirect runs. */
 export function ModuleLoading() {
@@ -51,28 +44,34 @@ export function ModuleAccessError() {
 }
 
 /**
- * Wraps a module world with the access check. Renders the loading state while
- * permissions resolve, then either the module's chrome or a silent redirect.
+ * Wraps a protected surface with the access check. Renders the loading state
+ * while permissions resolve, then either the content or a silent redirect.
  *
- * Two gates apply:
- * - Module gate: the user must be able to enter the world (`access[module]`).
- * - Permission gate: when `permission` is passed, that exact key is required;
+ * Two gates apply, both resolved by the ONE decision helper:
+ * - Module gate (when `module` is passed): the user must be able to enter the
+ *   world (`access[module]`). Workspace routes pass no module.
+ * - Permission gate: when `permission` is passed that exact key is required;
  *   otherwise the required key is resolved from the current pathname via
- *   `resolveRoutePermission` and the module gate is the only check when the
- *   route lists no key.
+ *   `resolveRoutePermission`, and only the module gate applies when the route
+ *   lists no key.
  *
- * Denial is handled with a silent client-side redirect to the module home
- * (or the workspace overview when the whole module is denied). A denied surface
- * never renders and never shows a denial notice, so its existence is not
- * revealed to the user. The error card is reserved for a failed access check,
- * which discloses nothing about the surface.
+ * Authentication is checked before permissions: the boundary renders nothing
+ * (a neutral spinner) until the effective permission set is resolved, so a page
+ * never mounts, fetches its data and then surfaces a backend 403.
+ *
+ * Denial is handled with a silent client-side redirect to the first route the
+ * user can actually open (the module home, the leave portal, or the workspace
+ * overview). A denied surface never renders and never shows a denial notice, so
+ * its existence is not revealed to the user. The error card is reserved for a
+ * failed access check, which discloses nothing about the surface.
  */
 export function ModuleAccessBoundary({
     module,
     permission,
     children,
 }: {
-    module: ModuleKey;
+    /** World gate. Omit for workspace/portal routes (route gate only). */
+    module?: ModuleKey;
     permission?: string;
     children: React.ReactNode;
 }) {
@@ -80,20 +79,22 @@ export function ModuleAccessBoundary({
     const pathname = usePathname();
     const router = useRouter();
 
-    const ready = status === "ready";
-    const required = permission ?? resolveRoutePermission(pathname);
-    const moduleDenied = ready && !access[module];
-    const permissionDenied =
-        ready && !!required && !hasPermission(permissions, required);
-    const denied = moduleDenied || permissionDenied;
-    const fallback = deniedFallback(module, ready && !moduleDenied);
+    const decision = resolveAccessDecision({
+        status,
+        access,
+        permissions,
+        module,
+        required: permission,
+        pathname,
+    });
+    const redirect = decision.state === "denied" ? decision.redirect : null;
 
     useEffect(() => {
-        if (denied) void router.replace(fallback);
-    }, [denied, fallback, router]);
+        if (redirect) void router.replace(redirect);
+    }, [redirect, router]);
 
-    if (status === "loading") return <ModuleLoading />;
-    if (status === "error") return <ModuleAccessError />;
-    if (denied) return <ModuleLoading />;
+    if (decision.state === "loading") return <ModuleLoading />;
+    if (decision.state === "error") return <ModuleAccessError />;
+    if (decision.state === "denied") return <ModuleLoading />;
     return <>{children}</>;
 }
