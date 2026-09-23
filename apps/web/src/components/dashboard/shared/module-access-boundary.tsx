@@ -117,6 +117,11 @@ export function ModuleAccessBoundary({
 
     if (decision.state === "loading") return <ModuleLoading module={module} />;
     if (decision.state === "error") return <ModuleAccessError />;
-    if (decision.state === "denied") return <ModuleLoading module={module} />;
+    if (decision.state === "denied") {
+        // Denied surfaces never render their own content shape: show the
+        // neutral workspace skeleton while the silent redirect runs, so the
+        // map-out reveals nothing about the surface being denied.
+        return <ModuleLoading />;
+    }
     return <>{children}</>;
 }

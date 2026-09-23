@@ -78,22 +78,6 @@ export function PageHeaderSkeleton() {
     );
 }
 
-/** The workspace topbar (menu button, title, actions). */
-export function TopbarSkeleton() {
-    return (
-        <div className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border/70 bg-card/85 px-4 lg:px-6">
-            <div className="flex min-w-0 items-center gap-2">
-                <Skeleton className="size-9 rounded-lg lg:hidden" />
-                <Skeleton className="h-5 w-40" />
-            </div>
-            <div className="flex shrink-0 items-center gap-2">
-                <Skeleton className="size-9 rounded-lg" />
-                <Skeleton className="size-9 rounded-lg" />
-            </div>
-        </div>
-    );
-}
-
 /* ---------------------------------------------------------------------------
  * Workspace (main)
  * ------------------------------------------------------------------------- */
@@ -218,9 +202,24 @@ export function AgentsHomeSkeleton() {
     );
 }
 
-
-
-
+/** Route fallback for queue-style agents pages (Sales Coach, Audit Guardian):
+ * three card-shaped rows matching those pages' own loading state. Content-only:
+ * `AgentsShell` already mounts the real chrome around the segment. */
+export function QueueListSkeleton() {
+    return (
+        <div className="flex h-full flex-1 flex-col overflow-hidden">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-6">
+                <div className="mx-auto max-w-3xl space-y-4">
+                    <div aria-hidden="true" className="space-y-3">
+                        {[0, 1, 2].map((row) => (
+                            <Skeleton key={row} className="h-32 w-full rounded-xl" />
+                        ))}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 /* ---------------------------------------------------------------------------
  * ERP world - conventional operations app
@@ -253,30 +252,6 @@ export function ErpOverviewSkeleton() {
 /* ---------------------------------------------------------------------------
  * Market Intelligence (Skyrict GMIE) world - search engine
  * ------------------------------------------------------------------------- */
-
-/** The GMIE navbar (menu button, wordmark, routes, country, profile). */
-export function IntelligenceNavSkeleton() {
-    return (
-        <header className="shrink-0 border-b border-border/70 bg-card/85">
-            <div className="mx-auto flex h-16 w-full max-w-6xl items-center gap-4 px-4 lg:px-6">
-                <Skeleton className="size-10 shrink-0 rounded-lg" />
-                <Skeleton className="h-6 w-32 shrink-0" />
-                <div className="flex min-w-0 items-center gap-2 overflow-hidden">
-                    {[0, 1, 2, 3].map((index) => (
-                        <Skeleton
-                            key={index}
-                            className="h-8 w-16 shrink-0 rounded-full"
-                        />
-                    ))}
-                </div>
-                <div className="ml-auto flex shrink-0 items-center gap-2">
-                    <Skeleton className="h-9 w-36 rounded-full" />
-                    <Skeleton className="size-9 rounded-full" />
-                </div>
-            </div>
-        </header>
-    );
-}
 
 /** The GMIE search landing: icon, title, hero search pill, suggestions. */
 export function IntelligenceHomeSkeleton() {
@@ -356,20 +331,6 @@ export function IntelligenceResultsListSkeleton() {
                     <ResultRowSkeleton key={index} />
                 ))}
             </div>
-        </div>
-    );
-}
-
-/** Full-page GMIE world: navbar + search landing. */
-export function IntelligenceWorldSkeleton() {
-    return (
-        <div className="flex h-dvh flex-col overflow-hidden bg-background">
-            <IntelligenceNavSkeleton />
-            <main className="flex-1 overflow-y-auto">
-                <div className="mx-auto w-full max-w-5xl px-4 py-8 lg:px-6">
-                    <IntelligenceHomeSkeleton />
-                </div>
-            </main>
         </div>
     );
 }
