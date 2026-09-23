@@ -6,20 +6,34 @@ import { usePathname, useRouter } from "next/navigation";
 import { ShieldAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
+import {
+    AgentsHomeSkeleton,
+    ErpOverviewSkeleton,
+    IntelligenceHomeSkeleton,
+    OverviewSkeleton,
+} from "@/components/ui/page-skeletons";
 import { useModuleAccess, type ModuleKey } from "@/lib/access/modules";
 import {
     resolveAccessDecision,
     type PermissionRequirement,
 } from "@/lib/access/route-permissions";
 
-/** Minimal loading indicator while permissions resolve or a redirect runs. */
-export function ModuleLoading() {
-    return (
-        <div className="flex min-h-dvh items-center justify-center bg-background">
-            <Spinner className="size-5 text-muted-foreground" />
-        </div>
-    );
+/**
+ * Loading indicator while permissions resolve or a redirect runs.
+ *
+ * Renders the world's own body skeleton instead of a bare centered spinner, so
+ * a cache-miss navigation inside an already-mounted shell never flashes a
+ * spinner over the live chrome. The shape matches the route fallback the user
+ * expects for that world (workspace/portal -> Overview, ERP -> ERP overview,
+ * agents -> agents home, intelligence -> intelligence home). Content-shaped,
+ * never a full world shell (the shell chrome is already mounted around this
+ * boundary).
+ */
+export function ModuleLoading({ module }: { module?: ModuleKey }) {
+    if (module === "erp") return <ErpOverviewSkeleton />;
+    if (module === "agents") return <AgentsHomeSkeleton />;
+    if (module === "intelligence") return <IntelligenceHomeSkeleton />;
+    return <OverviewSkeleton />;
 }
 
 export function ModuleAccessError() {
@@ -101,8 +115,8 @@ export function ModuleAccessBoundary({
         if (redirect) void router.replace(redirect);
     }, [redirect, router]);
 
-    if (decision.state === "loading") return <ModuleLoading />;
+    if (decision.state === "loading") return <ModuleLoading module={module} />;
     if (decision.state === "error") return <ModuleAccessError />;
-    if (decision.state === "denied") return <ModuleLoading />;
+    if (decision.state === "denied") return <ModuleLoading module={module} />;
     return <>{children}</>;
 }

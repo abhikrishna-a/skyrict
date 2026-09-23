@@ -185,96 +185,14 @@ export function ListPageSkeleton() {
     );
 }
 
-/* ---------------------------------------------------------------------------
- * AI Agents world - chat application
- * ------------------------------------------------------------------------- */
-
-/** The conversations rail (New chat, Recents, History, account footer). */
-function AgentsRailSkeleton() {
-    return (
-        <aside className="hidden w-72 shrink-0 flex-col bg-background lg:flex lg:h-full lg:rounded-lg">
-            <header className="flex items-center justify-between px-4 py-4">
-                <Skeleton className="size-7 rounded-lg" />
-                <Skeleton className="h-5 w-20" />
-            </header>
-
-            <div className="min-h-0 flex-1 space-y-6 overflow-hidden p-3">
-                <Skeleton className="h-9 w-full rounded-lg" />
-
-                <section className="space-y-1" aria-hidden="true">
-                    <Skeleton className="mb-2 ml-2.5 h-3 w-12 rounded-full" />
-                    <div className="flex h-8 items-center gap-3 rounded-lg px-2.5">
-                        <Skeleton className="h-3.5 w-1/2 rounded-md" />
-                    </div>
-                    <div className="flex h-8 items-center gap-3 rounded-lg px-2.5">
-                        <Skeleton className="h-3.5 w-1/3 rounded-md" />
-                    </div>
-                </section>
-
-                <section className="space-y-1" aria-hidden="true">
-                    <Skeleton className="mb-2 ml-2.5 h-3 w-14 rounded-full" />
-                    <div className="flex h-8 items-center gap-3 rounded-lg px-2.5">
-                        <Skeleton className="h-3.5 w-2/3 rounded-md" />
-                    </div>
-                    <div className="flex h-8 items-center gap-3 rounded-lg px-2.5">
-                        <Skeleton className="h-3.5 w-1/2 rounded-md" />
-                    </div>
-                </section>
-            </div>
-
-            <div className="border-t border-sidebar-border p-3">
-                <div className="flex h-8 items-center gap-3 rounded-lg px-2.5">
-                    <Skeleton className="size-[18px] rounded" />
-                    <Skeleton className="h-4 w-28" />
-                </div>
-            </div>
-
-            <footer className="border-t border-sidebar-border p-3">
-                <div className="flex items-center gap-3">
-                    <Skeleton className="size-8 shrink-0 rounded-full" />
-                    <div className="min-w-0 flex-1 space-y-1.5">
-                        <Skeleton className="h-3 w-3/4 rounded-full" />
-                        <Skeleton className="h-2.5 w-1/2 rounded-full" />
-                    </div>
-                    <Skeleton className="size-8 shrink-0 rounded-lg" />
-                </div>
-            </footer>
-        </aside>
-    );
-}
-
-/** The AI Agents conversation view: header, message bubbles, composer. */
-export function ChatSkeleton() {
-    return (
-        <div className="flex h-full flex-1 flex-col overflow-hidden">
-            <div className="flex h-12 shrink-0 items-center gap-2 px-4">
-                <Skeleton className="size-8 rounded-lg" />
-                <Skeleton className="h-4 w-44" />
-            </div>
-            <div className="flex-1 overflow-hidden px-4 py-6">
-                <div className="mx-auto flex w-full max-w-[44rem] flex-col gap-6">
-                    <div className="flex justify-end">
-                        <Skeleton className="h-12 w-3/4 rounded-2xl rounded-br-md" />
-                    </div>
-                    <div className="flex justify-start gap-3">
-                        <Skeleton className="size-8 shrink-0 rounded-lg" />
-                        <Skeleton className="h-16 w-2/3 rounded-2xl rounded-bl-md" />
-                    </div>
-                    <div className="flex justify-end">
-                        <Skeleton className="h-10 w-1/2 rounded-2xl rounded-br-md" />
-                    </div>
-                    <div className="flex justify-start gap-3">
-                        <Skeleton className="size-8 shrink-0 rounded-lg" />
-                        <Skeleton className="h-20 w-3/4 rounded-2xl rounded-bl-md" />
-                    </div>
-                </div>
-            </div>
-            <div className="shrink-0 px-4 pb-6 pt-2">
-                <Skeleton className="h-24 w-full rounded-[1.5rem]" />
-            </div>
-        </div>
-    );
-}
+/**
+ * AI Agents world - content-only fallbacks.
+ *
+ * `AgentsShell` (mounted by `ShellRouter` around the `/dashboard/agents`
+ * segment) already owns the real chrome, so route fallbacks here stand in for
+ * the page body only - never a full world shell (which would paint a second
+ * rail over the live one).
+ */
 
 /** The AI Agents home: hero, suggestion chips, composer. */
 export function AgentsHomeSkeleton() {
@@ -300,17 +218,9 @@ export function AgentsHomeSkeleton() {
     );
 }
 
-/** Full-page AI Agents world: rail + chat area. */
-export function AgentsWorldSkeleton() {
-    return (
-        <div className="flex h-dvh overflow-hidden bg-muted/30 p-2 theme-agents">
-            <AgentsRailSkeleton />
-            <div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg bg-sidebar">
-                <ChatSkeleton />
-            </div>
-        </div>
-    );
-}
+
+
+
 
 /* ---------------------------------------------------------------------------
  * ERP world - conventional operations app
