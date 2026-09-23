@@ -60,7 +60,7 @@ export const tourSteps: TourStep[] = [
     {
         target: "nav-invite",
         icon: UserPlus,
-        title: "Invite team",
+        title: "Invite member",
         description:
             "Send a link that lets new teammates join your workspace. You control the role they land in.",
         placement: "right",
