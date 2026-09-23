@@ -158,15 +158,6 @@ _SYSTEM_ROLE_DEFINITIONS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 
-def _pg_array_literal(values: tuple[str, ...]) -> str:
-    """Render a platform permission tuple as a PostgreSQL text[] literal."""
-    elements = []
-    for value in values:
-        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-        elements.append(f'"{escaped}"')
-    return "{" + ",".join(elements) + "}"
-
-
 def upgrade() -> None:
     bind = op.get_bind()
     for name, permissions in _SYSTEM_ROLE_DEFINITIONS:
@@ -176,7 +167,12 @@ def upgrade() -> None:
                 "WHERE name = :name AND is_system_role = TRUE"
             ),
             {
-                "permissions": _pg_array_literal(permissions),
+                # Bind a real list: asyncpg encodes Python lists natively for
+                # text[] columns. Binding the rendered literal as a string
+                # fails with DataError ("a sized iterable container expected")
+                # because asyncpg must encode the parameter before Postgres
+                # ever sees the CAST.
+                "permissions": list(permissions),
                 "name": name,
             },
         )
