@@ -66,6 +66,7 @@ from ai_agent.features.supervisor.schemas import (
     AGENT_SALES_COACH,
     Citation,
 )
+from ai_agent.graphs.security import PERM_INVENTORY_READ, grants_permission
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Sequence
@@ -203,11 +204,16 @@ class InventoryMonitorDelegator:
         gateway_factory: Callable[[], Awaitable[InventoryGatewayPort]],
         rag: RagSearchPort | None = None,
         forecast: ForecastPort | None = None,
+        granted_permissions: frozenset[str] = frozenset(),
     ) -> None:
         self._llm_router = llm_router
         self._gateway_factory = gateway_factory
         self._rag = rag
         self._forecast = forecast
+        # Defense-in-depth: the service leaf gate already refuses this delegate
+        # for callers without erp.inventory.read; this grants check keeps the
+        # RAG read gated even if a future caller drives the delegate directly.
+        self._granted_permissions = granted_permissions
 
     async def stream(
         self,
@@ -256,7 +262,9 @@ class InventoryMonitorDelegator:
         parts: list[str] = []
         lowered = query.casefold()
 
-        if self._rag is not None:
+        if self._rag is not None and grants_permission(
+            self._granted_permissions, PERM_INVENTORY_READ
+        ):
             try:
                 result = await self._rag.search(
                     query=query,

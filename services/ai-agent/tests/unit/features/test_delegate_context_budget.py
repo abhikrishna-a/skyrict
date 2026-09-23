@@ -28,6 +28,7 @@ from ai_agent.features.supervisor.delegates import (
     InventoryMonitorDelegator,
     SalesCoachDelegator,
 )
+from ai_agent.graphs.security import PERM_INVENTORY_READ
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -135,6 +136,21 @@ class _FakeRag:
         )
 
 
+class _CountingRag(_FakeRag):
+    """RAG fake that records how many retrieval reads a turn performed."""
+
+    def __init__(self) -> None:
+        self.search_calls = 0
+
+    async def search(
+        self, *, query: str, tenant_id: uuid.UUID, user_id: uuid.UUID, module: str | None = None
+    ) -> Any:
+        self.search_calls += 1
+        return await super().search(
+            query=query, tenant_id=tenant_id, user_id=user_id, module=module
+        )
+
+
 class _FakeSuggestions:
     async def list_pending_for_rep(
         self, *, tenant_id: uuid.UUID, rep_user_id: uuid.UUID
@@ -170,12 +186,44 @@ class TestDelegateContextBudget:
             llm_router=router,  # type: ignore[arg-type]
             gateway_factory=_fake_inventory_gateway,
             rag=_FakeRag(),  # type: ignore[arg-type]
+            granted_permissions=frozenset({PERM_INVENTORY_READ}),
         )
         await _collect_tokens(delegator, "what stock is below reorder point?")
 
         assert router.last_request is not None
         assert _ELISION in router.last_request.user_prompt
         assert len(_BIG) > len(router.last_request.user_prompt)
+
+    async def test_inventory_skips_rag_without_inventory_grant(self) -> None:
+        """Defense-in-depth: no ``erp.inventory.read`` grant -> zero RAG reads.
+
+        The service leaf gate already refuses the whole delegate for such a
+        caller; this proves the delegate also cannot retrieve RAG chunks when
+        driven directly (e.g. by a future caller that bypasses the loop).
+        """
+        router = _CaptureRouter()
+        rag = _CountingRag()
+        delegator = InventoryMonitorDelegator(
+            llm_router=router,  # type: ignore[arg-type]
+            gateway_factory=_fake_inventory_gateway,
+            rag=rag,  # type: ignore[arg-type]
+        )
+        await _collect_tokens(delegator, "what stock is below reorder point?")
+
+        assert rag.search_calls == 0
+
+    async def test_inventory_uses_rag_with_inventory_grant(self) -> None:
+        router = _CaptureRouter()
+        rag = _CountingRag()
+        delegator = InventoryMonitorDelegator(
+            llm_router=router,  # type: ignore[arg-type]
+            gateway_factory=_fake_inventory_gateway,
+            rag=rag,  # type: ignore[arg-type]
+            granted_permissions=frozenset({PERM_INVENTORY_READ}),
+        )
+        await _collect_tokens(delegator, "what stock is below reorder point?")
+
+        assert rag.search_calls == 1
 
     async def test_crm_bounds_live_data_and_memory(self) -> None:
         router = _CaptureRouter()

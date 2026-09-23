@@ -274,6 +274,7 @@ class SupervisorService:
                 gateway_factory=gateway_factory,
                 rag=rag,
                 forecast=forecast,
+                granted_permissions=self._granted_permissions,
             )
         }
         if hr_copilot is not None:
