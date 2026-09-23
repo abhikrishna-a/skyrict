@@ -27,12 +27,21 @@ from ai_agent.features.finance.gateway import (
     TrialBalanceRowRef,
 )
 from ai_agent.features.supervisor.delegates import FinanceDelegator
+from ai_agent.graphs.security import (
+    PERM_AI_INVOKE,
+    PERM_CRM_READ,
+    PERM_FINANCE_READ,
+)
 
 if TYPE_CHECKING:
     from ai_agent.features.supervisor.schemas import Citation
 
 TENANT_ID = uuid.uuid4()
 USER_ID = uuid.uuid4()
+
+# A real chat caller holds erp.ai.invoke plus the module key; the delegate's
+# intrinsic gate requires at least erp.finance.read to run any gateway read.
+FINANCE_GRANTS = frozenset({PERM_AI_INVOKE, PERM_FINANCE_READ})
 
 
 class FakeLlmRouter:
@@ -122,7 +131,34 @@ def make_delegator(router: FakeLlmRouter, gateway: FakeFinanceGateway) -> Financ
     async def factory() -> FakeFinanceGateway:
         return gateway
 
-    return FinanceDelegator(llm_router=router, finance_gateway_factory=factory)
+    return FinanceDelegator(
+        llm_router=router,
+        finance_gateway_factory=factory,
+        granted_permissions=FINANCE_GRANTS,
+    )
+
+
+async def test_stream_refuses_without_finance_grant_and_never_queries_gateway() -> None:
+    """Fail-closed intrinsic gate: a CRM-only caller's delegate streams the
+    permission denial and the finance gateway is never constructed or read."""
+
+    async def forbidden_factory() -> FakeFinanceGateway:
+        raise AssertionError("finance gateway must not be constructed without erp.finance.read")
+
+    router = FakeLlmRouter()
+    delegator = FinanceDelegator(
+        llm_router=router,
+        finance_gateway_factory=forbidden_factory,
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_CRM_READ}),
+    )
+
+    text = await collect(delegator, "net income")
+
+    assert "You don't have permission to ask about Finance Assistant" in text
+    # The premium refusal names only the caller's real scope - never finance.
+    assert "Your access is scoped to CRM Assistant" in text
+    # No LLM fallback ran and the gateway factory was never reached.
+    assert router.calls == []
 
 
 def _invoice(status: str = "issued", total: str = "100.0000", month: int = 8) -> InvoiceRef:

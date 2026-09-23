@@ -41,6 +41,7 @@ from ai_agent.core.providers import LlmRequest
 from ai_agent.features.finance_intents import match_finance_intent, run_finance_intent
 from ai_agent.features.finance_intents.schemas import INTENT_META
 from ai_agent.features.memory_compaction.budget import ContextBudgetManager
+from ai_agent.features.supervisor.permissions import permission_denied_message
 from ai_agent.features.supervisor.prompt_builder import StablePromptBuilder
 from ai_agent.features.supervisor.prompts import (
     CRM_NO_ANSWER,
@@ -70,7 +71,11 @@ from ai_agent.features.supervisor.schemas import (
     AGENT_SALES_COACH,
     Citation,
 )
-from ai_agent.graphs.security import PERM_INVENTORY_READ, grants_permission
+from ai_agent.graphs.security import (
+    PERM_FINANCE_READ,
+    PERM_INVENTORY_READ,
+    grants_permission,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Sequence
@@ -716,6 +721,10 @@ class FinanceDelegator:
       * Every read forwards the caller's JWT + tenant slug, so core enforces
         ``erp.finance.read`` + tenant isolation. The context handed to the LLM
         is therefore exactly what the acting user may view in the finance UI.
+      * Fail closed at the delegate boundary: a ``stream`` call without
+        ``erp.finance.read`` in the resolved grants streams the permission
+        denial BEFORE any gateway is constructed, so a finance-only delegate
+        can never touch (or leak) finance data under a caller who lacks the key.
     """
 
     key = AGENT_FINANCE
@@ -734,6 +743,7 @@ class FinanceDelegator:
         self._finance_gateway_factory = finance_gateway_factory
         self._tool_cache = tool_cache
         self._tool_cache_ttl_seconds = tool_cache_ttl_seconds
+        self._granted_permissions = granted_permissions
         # Deterministic summaries are cached per permission set: a figure
         # computed under one role must never be served to a different one.
         self._permission_scope = permission_scope(granted_permissions)
@@ -747,6 +757,20 @@ class FinanceDelegator:
         citations: list[Citation],
     ) -> AsyncIterator[str]:
         del user_id
+        # Intrinsic authz (defense in depth on top of the supervisor leaf
+        # gate): a finance delegate constructed without erp.finance.read must
+        # refuse BEFORE the gateway is built, so no finance read or context
+        # gather can ever run for a caller who lacks the key.
+        if not grants_permission(self._granted_permissions, PERM_FINANCE_READ):
+            logger.warning(
+                "supervisor.finance_denied_delegate",
+                permission_scope=self._permission_scope,
+            )
+            for delta in _iter_text_deltas(
+                permission_denied_message(self.display_name, self._granted_permissions)
+            ):
+                yield delta
+            return
         # A finance-only delegate must never invent figures: if finance is
         # unreachable at ANY point we stream the clean unavailable message, we
         # do not fall back to an ungrounded LLM answer.

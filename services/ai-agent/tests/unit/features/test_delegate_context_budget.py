@@ -28,7 +28,11 @@ from ai_agent.features.supervisor.delegates import (
     InventoryMonitorDelegator,
     SalesCoachDelegator,
 )
-from ai_agent.graphs.security import PERM_INVENTORY_READ
+from ai_agent.graphs.security import (
+    PERM_AI_INVOKE,
+    PERM_FINANCE_READ,
+    PERM_INVENTORY_READ,
+)
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -258,6 +262,7 @@ class TestDelegateContextBudget:
         delegator = FinanceDelegator(
             llm_router=router,  # type: ignore[arg-type]
             finance_gateway_factory=factory,
+            granted_permissions=frozenset({PERM_AI_INVOKE, PERM_FINANCE_READ}),
         )
 
         # The real gatherer produces naturally small text; monkeypatch it
