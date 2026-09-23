@@ -129,6 +129,43 @@ class FakeGateway:
         return []
 
 
+class FakeFinanceGateway:
+    """Spy stand-in for the finance gateway - counts every data call.
+
+    The authz regression test asserts this is NEVER invoked for an ungranted
+    caller; the counts let us prove the refusal replaced a finance fetch.
+    """
+
+    def __init__(self) -> None:
+        self.calls = 0
+        self.list_invoices_calls = 0
+
+    async def list_accounts(self) -> list[object]:
+        self.calls += 1
+        return []
+
+    async def list_invoices(self) -> list[object]:
+        self.calls += 1
+        self.list_invoices_calls += 1
+        return []
+
+    async def get_pnl(self) -> object | None:
+        self.calls += 1
+        return None
+
+    async def get_ar_aging(self) -> object | None:
+        self.calls += 1
+        return None
+
+    async def get_trial_balance(self, *, as_of: object) -> object | None:
+        self.calls += 1
+        return None
+
+    async def get_cashflow_projection(self, *, as_of: object) -> object | None:
+        self.calls += 1
+        return None
+
+
 class FakeRag:
     async def search(
         self,
@@ -224,6 +261,7 @@ def make_service(
     *,
     router: FakeLlmRouter | None = None,
     gateway: FakeGateway | None = None,
+    finance_gateway: FakeFinanceGateway | None = None,
     rag: FakeRag | None = None,
     hr_copilot: FakeHrCopilot | None = None,
     forecast: FakeForecast | None = None,
@@ -238,9 +276,15 @@ def make_service(
     async def gateway_factory() -> FakeGateway:
         return resolved_gateway
 
+    resolved_finance_gateway = finance_gateway or FakeFinanceGateway()
+
+    async def finance_gateway_factory() -> FakeFinanceGateway:
+        return resolved_finance_gateway
+
     return SupervisorService(
         llm_router=router or FakeLlmRouter(has_providers=True),
         gateway_factory=gateway_factory,
+        finance_gateway_factory=finance_gateway_factory,
         rag=rag,
         hr_copilot=hr_copilot,
         forecast=forecast,
@@ -539,7 +583,13 @@ async def test_permission_gate_refuses_inventory_for_crm_only_caller() -> None:
     assert "don't have permission" in text.casefold()
     # Steers to the caller's real grant scope - the premium guidance.
     assert "CRM Assistant" in text
-    assert '"top customers"' in text
+    assert "top customers" in text
+    # No OTHER module the caller cannot read is ever named in the refusal -
+    # Inventory Monitor itself is named because it is the denied module.
+    assert "Finance Assistant" not in text
+    assert "HR Copilot" not in text
+    assert "Sales Coach" not in text
+    assert "Audit Guardian" not in text
     citations = [
         e for e in events if isinstance(e, CitationsEvent) and e.agent == "inventory_monitor"
     ]
@@ -562,6 +612,39 @@ async def test_permission_gate_refuses_hr_for_crm_only_caller() -> None:
     assert "don't have permission" in text.casefold()
     assert "CRM Assistant" in text  # the accessible module is named
     assert "200 employees." not in text  # the HR delegate never ran
+
+
+async def test_permission_gate_refuses_finance_for_crm_only_caller() -> None:
+    """A CRM-only caller asking finance gets a refusal and NO finance fetch.
+
+    The user-facing bug report: "I have only the CRM permission, but the AI
+    acted as a finance assistant and showed invoice data." The leaf gate must
+    refuse before the finance delegate's stream runs, so the finance gateway
+    is never queried and no finance figure can leak.
+    """
+    finance_gateway = FakeFinanceGateway()
+    service = make_service(
+        provisioned={"finance_assistant": True},
+        finance_gateway=finance_gateway,
+        granted_permissions=frozenset({PERM_AI_INVOKE, PERM_CRM_READ}),
+    )
+
+    events = await collect(service, query="What is our net income?")
+
+    starts = [e for e in events if isinstance(e, AgentStartEvent)]
+    assert [e.agent for e in starts] == ["finance_assistant"]
+    text = tokens_text(events, "finance_assistant")
+    assert "don't have permission" in text.casefold()
+    assert "CRM Assistant" in text  # scoped guidance names only real access
+    # No finance figure, no "12 invoices" style content, no leak of other modules.
+    assert "net income" not in text.casefold()
+    assert "invoice" not in text.casefold()
+    assert "Inventory Monitor" not in text
+    assert "HR Copilot" not in text
+    assert finance_gateway.calls == 0
+    assert finance_gateway.list_invoices_calls == 0
+    done = next(e for e in events if isinstance(e, DoneEvent))
+    assert done.agents == ("finance_assistant",)
 
 
 async def test_permission_gate_allows_granted_leaf() -> None:
@@ -589,7 +672,7 @@ async def test_permission_gate_with_no_module_grants_still_refuses() -> None:
     text = tokens_text(events, "inventory_monitor")
     assert "don't have permission" in text.casefold()
     assert "CRM Assistant" not in text  # no agent is accessible, none is named
-    assert "module your account can access" in text
+    assert "doesn't have access to any assistant modules yet" in text
 
 
 async def test_permission_gate_fan_out_streams_granted_leaf_and_refuses_denied() -> None:
@@ -623,13 +706,26 @@ def test_accessible_agents_are_derived_from_grants() -> None:
 
 
 def test_permission_denied_message_names_denied_module_and_accessible_scope() -> None:
-    """The refusal names what was denied AND what the caller can ask instead."""
+    """The refusal names what was denied AND scopes guidance to real access."""
     message = permission_denied_message(
         "Finance Assistant", frozenset({PERM_AI_INVOKE, PERM_CRM_READ})
     )
     assert "don't have permission to ask about finance assistant" in message.casefold()
-    assert "CRM Assistant - try" in message
-    assert "Finance Assistant - try" not in message
+    assert "Your access is scoped to CRM Assistant" in message
+    assert "ask me about top customers, open deals, or your pipeline" in message
+    # A CRM-only caller is never told it can read other modules - no leak.
+    assert "Inventory Monitor" not in message
+    assert "invoices" not in message.casefold()
+    assert "net income" not in message.casefold()
+
+
+def test_permission_denied_message_two_modules_reads_naturally() -> None:
+    message = permission_denied_message(
+        "HR Copilot",
+        frozenset({PERM_AI_INVOKE, PERM_CRM_READ, PERM_INVENTORY_READ}),
+    )
+    assert "You can ask me about Inventory Monitor and CRM Assistant" in message
+    assert "for example, which stock is running low" in message
 
 
 async def test_stream_multi_agent_sequential_segments() -> None:
