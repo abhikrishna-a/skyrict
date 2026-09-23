@@ -30,17 +30,31 @@
 import { normalizeDashboardPath } from "@/lib/dashboard-path";
 import {
     accessibleModules,
+    hasAllPermissions,
     hasPermission,
     type AccessStatus,
     type ModuleAccess,
     type ModuleKey,
 } from "@/lib/access/modules";
 
+/**
+ * A permission requirement. Three shapes:
+ * - `string` - a single key that must be held;
+ * - `string[]` - ALL keys must be held (all-of), mirroring the backend's
+ *   `require_all_permissions` (the AI proxy surfaces need `erp.ai.invoke` AND
+ *   the module read key);
+ * - `{ anyOf: string[] }` - AT LEAST ONE of the keys must be held. Used by
+ *   tab-host pages whose panels each own a finer key (Finance Controls): a
+ *   holder of the area key alone would otherwise pass the gate and land on a
+ *   page with nothing to render.
+ */
+export type PermissionRequirement = string | string[] | { anyOf: string[] };
+
 export interface RoutePermission {
     /** Internal dashboard path. `[param]` segments match any single segment. */
     path: string;
-    /** Permission key required to render the path (and everything under it). */
-    permission: string;
+    /** Permission requirement to render the path (and everything under it). */
+    permission: PermissionRequirement;
 }
 
 /** Safe landing page per module, used as the silent-redirect target. */
@@ -55,21 +69,31 @@ export const MODULE_HOME: Record<ModuleKey, string> = {
  *
  * Every ERP surface that requires more than the module gate lives here:
  * area rows cover their whole subtree, and rows below an area override it for
- * the finer key (HR AI surfaces, Payroll approval surfaces, AI Docs).
+ * the finer key (HR AI surfaces, Payroll approval surfaces, AI Docs, Finance
+ * budgets/expenses/compliance/assets).
  *
  * Note the surfaces intentionally absent:
  * - `/dashboard/erp` and `/dashboard/erp/approvals` stay module-gated only.
  *   The ERP dashboard is the world's landing page for anyone with any `erp.*`
  *   key, and the Approvals inbox aggregates approval tasks across modules (no
  *   single key owns it); both are gated by the shell's module check.
- * - Redirect alias stubs (`/erp/sales`, `/erp/crm`, `/erp/finance/{assets,
- *   budgets, compliance, expenses}`) never render a page, but the sales row is
- *   listed anyway for defense in depth - a direct hit is redirected by the
- *   page file before this map is consulted, and the entry keeps the surface
- *   correct under any future change.
+ * - Redirect alias stubs (`/erp/sales`, `/erp/crm`) never render a page, but
+ *   the sales row is listed anyway for defense in depth - a direct hit is
+ *   redirected by the page file before this map is consulted, and the entry
+ *   keeps the surface correct under any future change. The finance
+ *   budget/expense/compliance/assets stubs redirect into tab panels on the
+ *   Controls and Ledger pages, so their entries carry the finer tab key: a
+ *   direct hit is denied before the redirect lands on a panel the user could
+ *   not open by hand.
  */
 export const ERP_ROUTE_PERMISSIONS: RoutePermission[] = [
     { path: "/dashboard/erp/crm", permission: "erp.crm.read" },
+    // CRM AI (proxy): erp.ai.invoke AND erp.crm.read, matching the backend
+    // AI router's dependency stack (`_require_ai_invoke` + `_require_crm_read`).
+    {
+        path: "/dashboard/erp/crm/ai",
+        permission: ["erp.ai.invoke", "erp.crm.read"],
+    },
     { path: "/dashboard/erp/orders", permission: "erp.sales.read" },
     // Redirect alias stub (real page redirects to /erp/orders).
     { path: "/dashboard/erp/sales", permission: "erp.sales.read" },
@@ -79,6 +103,25 @@ export const ERP_ROUTE_PERMISSIONS: RoutePermission[] = [
         path: "/dashboard/erp/inventory/suppliers",
         permission: "erp.inventory.suppliers.read",
     },
+    // Inventory AI surfaces (proxy): every one needs erp.ai.invoke AND
+    // erp.inventory.read - the backend does not define dedicated
+    // erp.inventory.ai.read keys, so the *frontend* gate is the conjunction.
+    {
+        path: "/dashboard/erp/inventory/suggestions",
+        permission: ["erp.ai.invoke", "erp.inventory.read"],
+    },
+    {
+        path: "/dashboard/erp/inventory/anomalies",
+        permission: ["erp.ai.invoke", "erp.inventory.read"],
+    },
+    {
+        path: "/dashboard/erp/inventory/forecast",
+        permission: ["erp.ai.invoke", "erp.inventory.read"],
+    },
+    {
+        path: "/dashboard/erp/inventory/abc",
+        permission: ["erp.ai.invoke", "erp.inventory.read"],
+    },
     { path: "/dashboard/erp/hr", permission: "erp.hr.read" },
     { path: "/dashboard/erp/hr/ai-alerts", permission: "erp.hr.ai.read" },
     { path: "/dashboard/erp/hr/attrition", permission: "erp.hr.ai.read" },
@@ -86,7 +129,33 @@ export const ERP_ROUTE_PERMISSIONS: RoutePermission[] = [
     { path: "/dashboard/erp/hr/compliance", permission: "erp.hr.ai.read" },
     { path: "/dashboard/erp/hr/planning", permission: "erp.hr.ai.planning" },
     { path: "/dashboard/erp/finance", permission: "erp.finance.read" },
+    // The Controls page is a TAB HOST for three finer-keyed panels. A holder
+    // of the area key alone has nothing to render there, so the gate is
+    // ANY-of the three panel keys (budgets OR expense control OR compliance) -
+    // mirroring `controlTabsForPermissions`: whoever holds at least one panel
+    // key may open the page and sees exactly their tabs; whoever holds none is
+    // denied before the page can render a blank tab host.
+    {
+        path: "/dashboard/erp/finance/controls",
+        permission: {
+            anyOf: ["erp.budget.read", "erp.expense.read", "erp.compliance.read"],
+        },
+    },
     { path: "/dashboard/erp/finance/ai-docs", permission: "erp.finance.ai.read" },
+    // Finance sub-surfaces with their OWN backend keys (not erp.finance.read).
+    // These pages are redirect stubs into tab panels on the Controls/Ledger
+    // pages; the entries bind the stub URL to the same finer key the backend
+    // router enforces (budgets.py -> erp.budget.read, expense_policy.py ->
+    // erp.expense.read, compliance_calendar.py -> erp.compliance.read,
+    // depreciation.py -> erp.asset.read) so a typed link is denied before the
+    // redirect can land on a panel the user could not open by hand.
+    { path: "/dashboard/erp/finance/budgets", permission: "erp.budget.read" },
+    { path: "/dashboard/erp/finance/expenses", permission: "erp.expense.read" },
+    {
+        path: "/dashboard/erp/finance/compliance",
+        permission: "erp.compliance.read",
+    },
+    { path: "/dashboard/erp/finance/assets", permission: "erp.asset.read" },
     { path: "/dashboard/erp/payroll", permission: "erp.payroll.read" },
     { path: "/dashboard/erp/payroll/reviews", permission: "erp.payroll.approve" },
     {
@@ -162,10 +231,17 @@ function prefixMatches(route: string[], url: string[]): boolean {
  * gate applies. Accepts the public URL form (`/erp/payroll/reviews`) or the
  * internal form (`/dashboard/erp/payroll/reviews`); both normalize the same
  * way. Longest matching entry wins.
+ *
+ * An ARRAY result means all-of: every key must be held (the AI proxy
+ * conjunction matrix, mirroring `require_all_permissions`). An object result
+ * (`{ anyOf: [...] }`) means at least one of the listed keys must be held
+ * (tab-host pages like Finance Controls).
  */
-export function resolveRoutePermission(pathname: string): string | null {
+export function resolveRoutePermission(
+    pathname: string,
+): PermissionRequirement | null {
     const url = segments(normalizeDashboardPath(pathname));
-    let best: string | null = null;
+    let best: PermissionRequirement | null = null;
     let bestLength = -1;
     for (const entry of ROUTE_PERMISSIONS) {
         const route = segments(entry.path);
@@ -212,6 +288,27 @@ export function deniedFallback(input: {
     return firstAccessibleRoute(input.access, input.permissions);
 }
 
+// ---------------------------------------------------------------------------
+// Permission helpers
+// ---------------------------------------------------------------------------
+
+/** True when `required` is satisfied: a string is a single-key check, an
+ * array is all-of (every key must be held), `{ anyOf }` needs at least one of
+ * the listed keys, and null means no gate. */
+function holdsRequirement(
+    permissions: string[],
+    required: PermissionRequirement | null,
+): boolean {
+    if (required === null) return true;
+    if (Array.isArray(required)) {
+        return hasAllPermissions(permissions, required);
+    }
+    if (typeof required === "object") {
+        return required.anyOf.some((key) => hasPermission(permissions, key));
+    }
+    return hasPermission(permissions, required);
+}
+
 /**
  * The ONE access decision every guard renders from.
  *
@@ -223,6 +320,10 @@ export function deniedFallback(input: {
  * - `required`/`pathname` apply the route gate. When `required` is omitted the
  *   key is resolved from the pathname through the route map, so a guard that
  *   only knows its path still cannot render a surface the map protects.
+ * - `required` may be an array (all-of) or `{ anyOf }` (any-of); the route map
+ *   returns arrays for the AI proxy surfaces (`erp.ai.invoke` + module read)
+ *   and any-of for tab-host pages, so every guard layer enforces the same
+ *   requirement as the map that resolved it.
  */
 export type AccessDecision =
     | { state: "loading" }
@@ -235,7 +336,7 @@ export function resolveAccessDecision(input: {
     access: ModuleAccess;
     permissions: string[];
     module?: ModuleKey;
-    required?: string | null;
+    required?: PermissionRequirement | null;
     pathname?: string;
 }): AccessDecision {
     if (input.status === "loading") return { state: "loading" };
@@ -245,8 +346,7 @@ export function resolveAccessDecision(input: {
         input.required ??
         (input.pathname ? resolveRoutePermission(input.pathname) : null);
     const moduleDenied = input.module ? !input.access[input.module] : false;
-    const permissionDenied =
-        required !== null && !hasPermission(input.permissions, required);
+    const permissionDenied = !holdsRequirement(input.permissions, required);
 
     if (!moduleDenied && !permissionDenied) return { state: "allowed" };
 

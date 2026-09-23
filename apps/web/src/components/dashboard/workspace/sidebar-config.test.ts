@@ -10,6 +10,7 @@ import {
     type NavGroup,
 } from "@/components/dashboard/workspace/sidebar-config";
 import { resolveRoutePermission } from "@/lib/access/route-permissions";
+import type { PermissionRequirement } from "@/lib/access/route-permissions";
 
 /* ---------- isSidebarItemActive ---------- */
 
@@ -245,7 +246,10 @@ describe("nav destinations are real pages, never redirect aliases", () => {
 /* ---------- Route permission consistency (hidden surfaces) ---------- */
 
 describe("ERP nav permissions resolve through route-permissions", () => {
-    function allErpNavItems(): Array<{ href: string; permission?: string }> {
+    function allErpNavItems(): Array<{
+        href: string;
+        permission?: PermissionRequirement;
+    }> {
         return erpNavGroups.flatMap((group) => group.items).flatMap((item) => [
             item,
             ...(item.children ?? []),
@@ -262,9 +266,34 @@ describe("ERP nav permissions resolve through route-permissions", () => {
     it("resolves every permission-gated nav href through the route map", () => {
         for (const item of allErpNavItems()) {
             if (!item.permission) continue;
-            expect(resolveRoutePermission(item.href), item.href).toBe(
+            // Arrays (all-of) compare deep - the route map returns its own
+            // array instance, so `toBe` would fail on reference identity.
+            expect(resolveRoutePermission(item.href), item.href).toEqual(
                 item.permission,
             );
+        }
+    });
+
+    it("gates the AI rows on the invoke + module-read conjunction", () => {
+        const aiInsights = allErpNavItems().find(
+            (item) => item.href === "/erp/crm/ai",
+        );
+        expect(aiInsights?.permission).toEqual([
+            "erp.ai.invoke",
+            "erp.crm.read",
+        ]);
+
+        for (const href of [
+            "/erp/inventory/suggestions",
+            "/erp/inventory/anomalies",
+            "/erp/inventory/forecast",
+            "/erp/inventory/abc",
+        ]) {
+            const row = allErpNavItems().find((item) => item.href === href);
+            expect(row?.permission, href).toEqual([
+                "erp.ai.invoke",
+                "erp.inventory.read",
+            ]);
         }
     });
 });
@@ -326,7 +355,7 @@ describe("permission-aware sidebar", () => {
             INVITE_ONLY,
         ).map((item) => item.label);
         // Invitation capability survives the fix.
-        expect(accountLabels).toEqual(["Invite team", "Settings"]);
+        expect(accountLabels).toEqual(["Invite member", "Settings"]);
     });
 
     it("shows a CRM-read user the CRM subtree only", () => {
@@ -341,6 +370,54 @@ describe("permission-aware sidebar", () => {
         expect(labels).not.toContain("Finance");
         expect(labels).not.toContain("Documents");
         expect(labels).not.toContain("Reports");
+    });
+
+    it("hides AI rows from a module-read user without erp.ai.invoke", () => {
+        // The bug being fixed: a CRM-read-only user saw "AI Insights" and an
+        // inventory-read-only user saw "AI Suggestions"/"ABC Classification"
+        // in the sidebar, then hit the backend 403 on visit. The AI proxy
+        // needs erp.ai.invoke AND the module read, so the rows must hide.
+        const crmLabels = navLabels(
+            filterNavGroupsByPermissions(erpNavGroups, CRM_READ),
+        );
+        expect(crmLabels).not.toContain("AI Insights");
+        // CRM Search is a plain /api/v1/crm/search surface (crm-api.ts), gated
+        // on erp.crm.read only - NOT an AI proxy - so it stays visible.
+        expect(crmLabels).toContain("Search");
+
+        const inventoryRead = navLabels(
+            filterNavGroupsByPermissions(
+                erpNavGroups,
+                ["erp.inventory.read"],
+            ),
+        );
+        expect(inventoryRead).toContain("Inventory");
+        expect(inventoryRead).toContain("Products");
+        expect(inventoryRead).not.toContain("AI Suggestions");
+        expect(inventoryRead).not.toContain("Anomalies");
+        expect(inventoryRead).not.toContain("Forecast");
+        expect(inventoryRead).not.toContain("ABC Classification");
+    });
+
+    it("shows the AI rows once the holder also holds erp.ai.invoke", () => {
+        const crmInvoke = navLabels(
+            filterNavGroupsByPermissions(erpNavGroups, [
+                "erp.ai.invoke",
+                "erp.crm.read",
+            ]),
+        );
+        expect(crmInvoke).toContain("AI Insights");
+
+        const inventoryInvoke = navLabels(
+            filterNavGroupsByPermissions(erpNavGroups, [
+                "erp.ai.invoke",
+                "erp.inventory.read",
+            ]),
+        );
+        expect(inventoryInvoke).toContain("AI Suggestions");
+        expect(inventoryInvoke).toContain("Anomalies");
+        expect(inventoryInvoke).toContain("Forecast");
+        expect(inventoryInvoke).toContain("ABC Classification");
     });
 
     it("keeps empty groups out of the rendered nav", () => {
@@ -371,6 +448,37 @@ describe("permission-aware sidebar", () => {
             workspaceAccountItems,
             ["*"],
         ).map((item) => item.label);
-        expect(accountLabels).toEqual(["Invite team", "Members", "Settings"]);
+        expect(accountLabels).toEqual(["Invite member", "Members", "Settings"]);
+    });
+
+    it("hides the Finance Controls row from a finance.read-only user", () => {
+        // The reported bug: a user with only the area key saw "Planning &
+        // Policy", clicked it, and got a blank page (no panel key -> no tab).
+        // The row must hide unless at least one panel key is held.
+        const financeOnly = navLabels(
+            filterNavGroupsByPermissions(erpNavGroups, ["erp.finance.read"]),
+        );
+        expect(financeOnly).toContain("Finance");
+        expect(financeOnly).toContain("Ledger");
+        expect(financeOnly).not.toContain("Planning & Policy");
+    });
+
+    it("shows the Finance Controls row once any one panel key is held", () => {
+        // Any-of the three panel keys opens the row (the page then renders
+        // exactly the tabs the user's keys own); the parent Finance row still
+        // requires the area key, so both must be held to SEE the sidebar.
+        for (const key of [
+            "erp.budget.read",
+            "erp.expense.read",
+            "erp.compliance.read",
+        ]) {
+            const labels = navLabels(
+                filterNavGroupsByPermissions(erpNavGroups, [
+                    "erp.finance.read",
+                    key,
+                ]),
+            );
+            expect(labels, key).toContain("Planning & Policy");
+        }
     });
 });

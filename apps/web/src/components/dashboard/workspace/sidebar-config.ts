@@ -1,4 +1,5 @@
 import { normalizeDashboardPath } from "@/lib/dashboard-path";
+import type { PermissionRequirement } from "@/lib/access/route-permissions";
 import { AiGlyph } from "@/components/brand/logo";
 import {
     Activity,
@@ -47,8 +48,18 @@ export interface NavItem {
     href: string;
     label: string;
     icon: LucideIcon | typeof AiGlyph;
-    /** Permission key that gates this item (absent = always visible inside its world). */
-    permission?: string;
+    /**
+     * Permission requirement that gates this item (absent = always visible
+     * inside its world).
+     * - A STRING is a plain key check.
+     * - An ARRAY is all-of - every key must be held - matching the backend's
+     *   `require_all_permissions`; the AI proxy rows use this
+     *   (`erp.ai.invoke` AND the module read key).
+     * - `{ anyOf: [...] }` means at least one listed key must be held - used
+     *   by tab-host rows whose panels each own a finer key (Finance
+     *   Controls), so the row hides when the user could not render any panel.
+     */
+    permission?: PermissionRequirement;
     soon?: boolean;
     tour?: string;
     /** Match only the exact href, never child paths (e.g. module overviews). */
@@ -140,7 +151,7 @@ export const workspaceNavGroups: NavGroup[] = [
 export const workspaceAccountItems: NavItem[] = [
     {
         href: "/dashboard/invite",
-        label: "Invite team",
+        label: "Invite member",
         icon: UserPlus,
         permission: "invitations:send",
         tour: "nav-invite",
@@ -225,7 +236,7 @@ export const erpNavGroups: NavGroup[] = [
                         href: "/erp/crm/ai",
                         label: "AI Insights",
                         icon: AiGlyph,
-                        permission: "erp.crm.read",
+                        permission: ["erp.ai.invoke", "erp.crm.read"],
                     },
                     {
                         href: "/erp/crm/search",
@@ -282,25 +293,25 @@ export const erpNavGroups: NavGroup[] = [
                         href: "/erp/inventory/suggestions",
                         label: "AI Suggestions",
                         icon: ShoppingCart,
-                        permission: "erp.inventory.read",
+                        permission: ["erp.ai.invoke", "erp.inventory.read"],
                     },
                     {
                         href: "/erp/inventory/anomalies",
                         label: "Anomalies",
                         icon: AlertTriangle,
-                        permission: "erp.inventory.read",
+                        permission: ["erp.ai.invoke", "erp.inventory.read"],
                     },
                     {
                         href: "/erp/inventory/forecast",
                         label: "Forecast",
                         icon: Calendar,
-                        permission: "erp.inventory.read",
+                        permission: ["erp.ai.invoke", "erp.inventory.read"],
                     },
                     {
                         href: "/erp/inventory/abc",
                         label: "ABC Classification",
                         icon: BarChart3,
-                        permission: "erp.inventory.read",
+                        permission: ["erp.ai.invoke", "erp.inventory.read"],
                     },
                     {
                         href: "/erp/inventory/health",
@@ -420,7 +431,18 @@ export const erpNavGroups: NavGroup[] = [
                         href: "/erp/finance/controls",
                         label: "Planning & Policy",
                         icon: SlidersHorizontal,
-                        permission: "erp.finance.read",
+                        // The row is a tab host for three finer-keyed panels
+                        // (budgets / expense control / compliance); a holder
+                        // of only the area key would land on a blank page, so
+                        // the row shows when at least one panel key is held -
+                        // matching the route map's anyOf for this path.
+                        permission: {
+                            anyOf: [
+                                "erp.budget.read",
+                                "erp.expense.read",
+                                "erp.compliance.read",
+                            ],
+                        },
                     },
                     {
                         href: "/erp/finance/audit-log",
@@ -519,7 +541,13 @@ export const erpNavGroups: NavGroup[] = [
     },
 ];
 
-/** Keep only nav items whose permission the user holds (wildcard grants all). */
+/**
+ * Keep only nav items whose permission the user holds (wildcard grants all).
+ * A single-key `permission` is a plain key check; an ARRAY is all-of - every
+ * key must be held, mirroring `hasAllPermissions` / the backend's
+ * `require_all_permissions` for the AI proxy rows; `{ anyOf: [...] }` needs at
+ * least one listed key (tab-host rows whose panels each own a finer key).
+ */
 export function filterNavItemsByPermissions(
     items: NavItem[],
     permissions: string[],
@@ -527,12 +555,13 @@ export function filterNavItemsByPermissions(
     const allowed = new Set(permissions);
     const result: NavItem[] = [];
     for (const item of items) {
-        if (
-            item.permission &&
-            !allowed.has("*") &&
-            !allowed.has(item.permission)
-        ) {
-            continue;
+        if (item.permission && !allowed.has("*")) {
+            const holds = Array.isArray(item.permission)
+                ? item.permission.every((key) => allowed.has(key))
+                : typeof item.permission === "object"
+                  ? item.permission.anyOf.some((key) => allowed.has(key))
+                  : allowed.has(item.permission);
+            if (!holds) continue;
         }
         if (item.children) {
             const children = filterNavItemsByPermissions(

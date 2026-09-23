@@ -7,7 +7,7 @@ import { CrmAiPanel } from "./crm-ai-panel";
 
 export default function CrmAiPage() {
     return (
-        <RequirePermission permission="erp.crm.read">
+        <RequirePermission permission={["erp.ai.invoke", "erp.crm.read"]}>
             <div className="space-y-6">
                 <PageHeader
                     title="AI Insights"

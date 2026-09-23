@@ -4,7 +4,10 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 import { useModuleAccess } from "@/lib/access/modules";
-import { resolveAccessDecision } from "@/lib/access/route-permissions";
+import {
+    resolveAccessDecision,
+    type PermissionRequirement,
+} from "@/lib/access/route-permissions";
 import { ListPageSkeleton } from "@/components/ui/page-skeletons";
 
 /**
@@ -24,7 +27,13 @@ export function RequirePermission({
     permission,
     children,
 }: {
-    permission: string;
+    /**
+     * Permission requirement (single key, all-of key set mirroring the
+     * backend's `require_all_permissions`, or `{ anyOf }` for at least one of
+     * a set) required to render the children. Used by the AI proxy pages whose
+     * data needs `erp.ai.invoke` AND a module read key.
+     */
+    permission: PermissionRequirement;
     children: React.ReactNode;
 }) {
     const { status, access, permissions } = useModuleAccess();

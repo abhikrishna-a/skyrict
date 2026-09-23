@@ -8,7 +8,10 @@ import { ShieldAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { useModuleAccess, type ModuleKey } from "@/lib/access/modules";
-import { resolveAccessDecision } from "@/lib/access/route-permissions";
+import {
+    resolveAccessDecision,
+    type PermissionRequirement,
+} from "@/lib/access/route-permissions";
 
 /** Minimal loading indicator while permissions resolve or a redirect runs. */
 export function ModuleLoading() {
@@ -72,7 +75,12 @@ export function ModuleAccessBoundary({
 }: {
     /** World gate. Omit for workspace/portal routes (route gate only). */
     module?: ModuleKey;
-    permission?: string;
+    /**
+     * Explicit permission requirement (single key, all-of array, or
+     * `{ anyOf }`). Omit to resolve it from the current pathname via
+     * `resolveRoutePermission` instead.
+     */
+    permission?: PermissionRequirement;
     children: React.ReactNode;
 }) {
     const { status, access, permissions } = useModuleAccess();

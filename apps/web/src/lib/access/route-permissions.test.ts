@@ -111,6 +111,99 @@ describe("resolveRoutePermission", () => {
     it("resolves the redirect alias for defense in depth", () => {
         expect(resolveRoutePermission("/erp/sales")).toBe("erp.sales.read");
     });
+
+    it("resolves the finance sub-surface stubs to their own keys", () => {
+        // The /erp/finance/{budgets,expenses,compliance,assets} pages are
+        // redirect stubs into tab panels on the Controls/Ledger pages; their
+        // entries bind the stub URL to the same finer key the backend router
+        // enforces so a typed link is denied before the redirect lands on a
+        // panel the user could not open by hand.
+        expect(resolveRoutePermission("/erp/finance/budgets")).toBe(
+            "erp.budget.read",
+        );
+        expect(resolveRoutePermission("/erp/finance/expenses")).toBe(
+            "erp.expense.read",
+        );
+        expect(resolveRoutePermission("/erp/finance/compliance")).toBe(
+            "erp.compliance.read",
+        );
+        expect(resolveRoutePermission("/erp/finance/assets")).toBe(
+            "erp.asset.read",
+        );
+        // The internal /dashboard form resolves identically.
+        expect(resolveRoutePermission("/dashboard/erp/finance/budgets")).toBe(
+            "erp.budget.read",
+        );
+    });
+
+    it("keeps the finance area rows on erp.finance.read", () => {
+        // Only the four sub-surface stubs carry finer keys; the area rows and
+        // the rest of the finance subtree stay on the area gate.
+        expect(resolveRoutePermission("/erp/finance")).toBe(
+            "erp.finance.read",
+        );
+        expect(resolveRoutePermission("/erp/finance/journal-entries")).toBe(
+            "erp.finance.read",
+        );
+        expect(resolveRoutePermission("/erp/finance/accounts")).toBe(
+            "erp.finance.read",
+        );
+    });
+
+    it("gates the Controls tab host on any-of its three panel keys", () => {
+        // /erp/finance/controls renders three finer-keyed tab panels
+        // (budgets / expense control / compliance); a holder of only the area
+        // key would land on a blank tab host, so the gate is any-of the panel
+        // keys instead of erp.finance.read.
+        expect(resolveRoutePermission("/erp/finance/controls")).toEqual({
+            anyOf: [
+                "erp.budget.read",
+                "erp.expense.read",
+                "erp.compliance.read",
+            ],
+        });
+        expect(resolveRoutePermission("/dashboard/erp/finance/controls")).toEqual(
+            {
+                anyOf: [
+                    "erp.budget.read",
+                    "erp.expense.read",
+                    "erp.compliance.read",
+                ],
+            },
+        );
+    });
+
+    it("resolves AI proxy surfaces to the invoke + module-read conjunction", () => {
+        // CRM AI needs erp.ai.invoke AND erp.crm.read; the inventory AI
+        // surfaces need erp.ai.invoke AND erp.inventory.read (no dedicated
+        // erp.crm.ai.read / erp.inventory.ai.read keys exist in the backend).
+        expect(resolveRoutePermission("/erp/crm/ai")).toEqual([
+            "erp.ai.invoke",
+            "erp.crm.read",
+        ]);
+        for (const path of [
+            "/erp/inventory/suggestions",
+            "/erp/inventory/anomalies",
+            "/erp/inventory/forecast",
+            "/erp/inventory/abc",
+        ]) {
+            expect(resolveRoutePermission(path), path).toEqual([
+                "erp.ai.invoke",
+                "erp.inventory.read",
+            ]);
+        }
+    });
+
+    it("keeps the deeper AI entries from leaking onto module pages", () => {
+        // /erp/crm/overview and /erp/inventory/stock stay on their area rows -
+        // only the AI sub-paths get the tigher conjunction.
+        expect(resolveRoutePermission("/erp/crm/overview")).toBe(
+            "erp.crm.read",
+        );
+        expect(resolveRoutePermission("/erp/inventory/stock")).toBe(
+            "erp.inventory.read",
+        );
+    });
 });
 
 describe("firstAccessibleRoute", () => {
@@ -355,5 +448,143 @@ describe("resolveAccessDecision - explicit page keys", () => {
                 required: "invitations:send",
             }),
         ).toEqual({ state: "allowed" });
+    });
+});
+
+describe("resolveAccessDecision - AI proxy conjunctions", () => {
+    it("denies CRM AI to a crm.read-only holder (missing invoke)", () => {
+        expect(decide(["erp.crm.read"], "/erp/crm/ai", "erp")).toEqual({
+            state: "denied",
+            redirect: "/erp",
+        });
+    });
+
+    it("denies CRM AI to an invoke-only holder (missing module read)", () => {
+        expect(decide(["erp.ai.invoke"], "/erp/crm/ai", "erp")).toEqual({
+            state: "denied",
+            redirect: "/erp",
+        });
+    });
+
+    it("allows CRM AI when invoke AND crm.read are held", () => {
+        expect(
+            decide(["erp.ai.invoke", "erp.crm.read"], "/erp/crm/ai", "erp"),
+        ).toEqual({ state: "allowed" });
+    });
+
+    it("denies inventory AI surfaces to a module-read-only holder", () => {
+        for (const path of [
+            "/erp/inventory/suggestions",
+            "/erp/inventory/anomalies",
+            "/erp/inventory/forecast",
+            "/erp/inventory/abc",
+        ]) {
+            expect(decide(["erp.inventory.read"], path, "erp"), path).toEqual({
+                state: "denied",
+                redirect: "/erp",
+            });
+        }
+    });
+
+    it("allows inventory AI surfaces with invoke AND inventory.read", () => {
+        expect(
+            decide(
+                ["erp.ai.invoke", "erp.inventory.read"],
+                "/erp/inventory/abc",
+                "erp",
+            ),
+        ).toEqual({ state: "allowed" });
+    });
+
+    it("grants the wildcard owner every AI surface", () => {
+        expect(decide(["*"], "/erp/crm/ai", "erp")).toEqual({
+            state: "allowed",
+        });
+        expect(decide(["*"], "/erp/inventory/forecast", "erp")).toEqual({
+            state: "allowed",
+        });
+    });
+});
+
+describe("resolveAccessDecision - finance sub-surface keys", () => {
+    it("denies the budget stub to a finance.read-only holder", () => {
+        expect(decide(["erp.finance.read"], "/erp/finance/budgets", "erp")).toEqual({
+            state: "denied",
+            redirect: "/erp",
+        });
+    });
+
+    it("denies the expense/compliance/assets stubs to a finance.read-only holder", () => {
+        for (const path of [
+            "/erp/finance/expenses",
+            "/erp/finance/compliance",
+            "/erp/finance/assets",
+        ]) {
+            expect(decide(["erp.finance.read"], path, "erp"), path).toEqual({
+                state: "denied",
+                redirect: "/erp",
+            });
+        }
+    });
+
+    it("allows each stub when its own key is held", () => {
+        expect(
+            decide(["erp.budget.read"], "/erp/finance/budgets", "erp"),
+        ).toEqual({ state: "allowed" });
+        expect(
+            decide(["erp.expense.read"], "/erp/finance/expenses", "erp"),
+        ).toEqual({ state: "allowed" });
+        expect(
+            decide(["erp.compliance.read"], "/erp/finance/compliance", "erp"),
+        ).toEqual({ state: "allowed" });
+        expect(
+            decide(["erp.asset.read"], "/erp/finance/assets", "erp"),
+        ).toEqual({ state: "allowed" });
+    });
+
+    it("keeps the Controls page denied for a finance.read-only holder", () => {
+        // The Controls page is a tab host for three finer-keyed panels; a
+        // holder of only the area key has nothing to render there (the old
+        // "allowed" result is exactly the blank-page bug this fixes).
+        expect(decide(["erp.finance.read"], "/erp/finance/controls", "erp")).toEqual(
+            { state: "denied", redirect: "/erp" },
+        );
+        // The Ledger page is different: its Accounts tab rides the page gate,
+        // so erp.finance.read always has content there.
+        expect(decide(["erp.finance.read"], "/erp/finance/accounts", "erp")).toEqual(
+            { state: "allowed" },
+        );
+    });
+
+    it("allows the Controls page when any one panel key is held", () => {
+        for (const key of [
+            "erp.budget.read",
+            "erp.expense.read",
+            "erp.compliance.read",
+        ]) {
+            expect(decide([key], "/erp/finance/controls", "erp"), key).toEqual({
+                state: "allowed",
+            });
+        }
+    });
+
+    it("denies the Controls page when every panel key is missing", () => {
+        // Holds the area key AND an unrelated ERP key - still no panel.
+        expect(
+            decide(
+                ["erp.finance.read", "erp.crm.read"],
+                "/erp/finance/controls",
+                "erp",
+            ),
+        ).toEqual({ state: "denied", redirect: "/erp" });
+    });
+
+    it("grants the wildcard owner every finance surface", () => {
+        expect(decide(["*"], "/erp/finance/budgets", "erp")).toEqual({
+            state: "allowed",
+        });
+        expect(decide(["*"], "/erp/finance/assets", "erp")).toEqual({
+            state: "allowed",
+        });
     });
 });
