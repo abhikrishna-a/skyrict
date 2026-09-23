@@ -260,6 +260,11 @@ module = ["factory"]
 follow_imports = "skip"
 
 [[tool.mypy.overrides]]
+# pyarrow ships no type stubs (fabric silver parquet export) — treat as Any.
+module = ["pyarrow", "pyarrow.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
 # Factories subclass factory_boy's Any-typed Factory base class.
 module = ["skyrict_testing.factories"]
 disallow_subclassing_any = false

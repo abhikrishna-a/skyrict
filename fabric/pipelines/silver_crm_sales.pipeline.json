@@ -1,0 +1,14 @@
+{
+    "name": "silver-crm-sales",
+    "module_group": "crm-sales",
+    "description": "Bronze to Silver transforms for CRM and Sales tables",
+    "source": "compose-stack",
+    "tables": [
+        {"name": "erp_crm_leads", "watermark_col": "updated_at", "pk_col": "id"},
+        {"name": "erp_crm_opportunities", "watermark_col": "updated_at", "pk_col": "id"},
+        {"name": "erp_crm_customers", "watermark_col": "updated_at", "pk_col": "id"},
+        {"name": "erp_sales_orders", "watermark_col": "updated_at", "pk_col": "id"},
+        {"name": "erp_sales_order_lines", "watermark_col": "updated_at", "pk_col": "id"}
+    ],
+    "schedule_cron": "0 */4 * * *"
+}

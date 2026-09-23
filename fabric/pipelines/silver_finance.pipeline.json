@@ -1,0 +1,14 @@
+{
+    "name": "silver-finance",
+    "module_group": "finance",
+    "description": "Bronze to Silver transforms for Finance tables",
+    "source": "compose-stack",
+    "tables": [
+        {"name": "erp_invoices", "watermark_col": "updated_at", "pk_col": "id"},
+        {"name": "erp_payments", "watermark_col": "updated_at", "pk_col": "id"},
+        {"name": "erp_journal_lines", "watermark_col": "updated_at", "pk_col": "id"},
+        {"name": "erp_products", "watermark_col": "updated_at", "pk_col": "id"},
+        {"name": "erp_currencies", "watermark_col": "created_at", "pk_col": "code"}
+    ],
+    "schedule_cron": "0 */4 * * *"
+}
