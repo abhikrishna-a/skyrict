@@ -80,6 +80,21 @@ export function hasPermission(permissions: string[], key: string): boolean {
     return permissions.includes(WILDCARD) || permissions.includes(key);
 }
 
+/**
+ * True when the user holds EVERY permission in `keys`, or the `*` wildcard.
+ *
+ * Mirrors the backend's `require_all_permissions` (the AI proxy matrix is the
+ * main caller: `erp.ai.invoke` AND the module read key, or the narrator's
+ * invoke + all four module reads). A single-key list behaves identically to
+ * `hasPermission`.
+ */
+export function hasAllPermissions(
+    permissions: string[],
+    keys: string[],
+): boolean {
+    return permissions.includes(WILDCARD) || keys.every((key) => permissions.includes(key));
+}
+
 const INITIAL_STATE: ModuleAccessState = {
     status: "loading",
     access: NO_ACCESS,

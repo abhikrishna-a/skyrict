@@ -19,6 +19,7 @@ import {
     accessibleModules,
     clearModuleAccess,
     getModuleAccess,
+    hasAllPermissions,
     hasPermission,
     isErpWorldPermission,
     refreshModuleAccess,
@@ -128,6 +129,38 @@ describe("hasPermission", () => {
         expect(hasPermission(crmRead, "erp.crm.update")).toBe(false);
         expect(hasPermission(crmRead, "erp.crm.delete")).toBe(false);
         expect(hasPermission(["invitations:send"], "erp.crm.read")).toBe(false);
+    });
+});
+
+describe("hasAllPermissions", () => {
+    it("requires every key when none is the wildcard", () => {
+        const aiCrm = ["erp.ai.invoke", "erp.crm.read"];
+        expect(hasAllPermissions(aiCrm, aiCrm)).toBe(true);
+        expect(hasAllPermissions(["erp.crm.read"], aiCrm)).toBe(false);
+        expect(hasAllPermissions(["erp.ai.invoke"], aiCrm)).toBe(false);
+        expect(hasAllPermissions(["erp.ai.invoke", "erp.crm.read", "*"], aiCrm)).toBe(
+            true,
+        );
+    });
+
+    it("accepts the wildcard for the whole set", () => {
+        const narrator = [
+            "erp.ai.invoke",
+            "erp.finance.read",
+            "erp.sales.read",
+            "erp.inventory.read",
+            "erp.crm.read",
+        ];
+        expect(hasAllPermissions(["*"], narrator)).toBe(true);
+    });
+
+    it("treats a single-key list like hasPermission", () => {
+        expect(hasAllPermissions(["erp.reports.read"], ["erp.reports.read"])).toBe(
+            true,
+        );
+        expect(hasAllPermissions(["erp.finance.read"], ["erp.reports.read"])).toBe(
+            false,
+        );
     });
 });
 

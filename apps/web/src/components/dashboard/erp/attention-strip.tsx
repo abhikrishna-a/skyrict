@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { listOpportunities, listOrders } from "@/lib/api/crm-api";
 import { listInvoices } from "@/lib/api/finance-api";
 import { listProducts } from "@/lib/api/inventory-api";
+import { hasPermission, useModuleAccess } from "@/lib/access/modules";
 
 interface AttentionState {
     state: "loading" | "error" | "ready";
@@ -28,10 +29,23 @@ interface AttentionState {
 }
 
 /**
- * Compact high-priority exceptions strip for decision items needing immediate attention.
- * Replaces the wall-of-text executive summary as the top hero widget on the ERP home.
+ * Compact high-priority exceptions strip for decision items needing immediate
+ * attention. Replaces the wall-of-text executive summary as the top hero widget
+ * on the ERP home.
+ *
+ * Every card is its own module surface: Out of Stock needs inventory read,
+ * Overdue Invoices needs finance read, Open Opportunities needs CRM read and
+ * Open Sales Orders needs sales read. Cards (and their API calls) render only
+ * for modules the user may actually read, so a restricted user never sees a
+ * card whose endpoint would 403 behind it.
  */
 export function AttentionStrip() {
+    const { status: accessStatus, permissions } = useModuleAccess();
+    const canReadInventory = hasPermission(permissions, "erp.inventory.read");
+    const canReadFinance = hasPermission(permissions, "erp.finance.read");
+    const canReadCrm = hasPermission(permissions, "erp.crm.read");
+    const canReadSales = hasPermission(permissions, "erp.sales.read");
+
     const [data, setData] = useState<AttentionState>({
         state: "loading",
         outOfStock: 0,
@@ -43,12 +57,23 @@ export function AttentionStrip() {
     const load = useCallback(async () => {
         setData((prev) => ({ ...prev, state: "loading" }));
         try {
+            // Only call the endpoints the user's keys allow; denied slots
+            // resolve to undefined so the allSettled shape stays stable and no
+            // denied module ever issues its request.
             const [productsRes, invoicesRes, opportunitiesRes, ordersRes] =
                 await Promise.allSettled([
-                    listProducts({ pageSize: 100 }),
-                    listInvoices(),
-                    listOpportunities({ limit: 100 }),
-                    listOrders({ limit: 100 }),
+                    canReadInventory
+                        ? listProducts({ pageSize: 100 })
+                        : Promise.resolve(undefined),
+                    canReadFinance
+                        ? listInvoices()
+                        : Promise.resolve(undefined),
+                    canReadCrm
+                        ? listOpportunities({ limit: 100 })
+                        : Promise.resolve(undefined),
+                    canReadSales
+                        ? listOrders({ limit: 100 })
+                        : Promise.resolve(undefined),
                 ]);
 
             let outOfStock = 0;
@@ -107,16 +132,28 @@ export function AttentionStrip() {
                 errorMessage: "Unable to load attention items.",
             });
         }
-    }, []);
+    }, [canReadInventory, canReadFinance, canReadCrm, canReadSales]);
 
     useEffect(() => {
         void load();
     }, [load]);
 
+    // Fail closed while module access is resolving: a user mid-resolution must
+    // not see shimmer for surfaces that may be denied to them.
+    if (accessStatus !== "ready") return null;
+
+    const allowedCards = [
+        canReadInventory,
+        canReadFinance,
+        canReadCrm,
+        canReadSales,
+    ].filter(Boolean).length;
+    if (allowedCards === 0) return null;
+
     if (data.state === "loading") {
         return (
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                {[...Array(4)].map((_, i) => (
+                {[...Array(allowedCards)].map((_, i) => (
                     <div
                         key={i}
                         className="h-24 animate-pulse rounded-xl border border-border bg-card p-4"
@@ -146,8 +183,17 @@ export function AttentionStrip() {
         );
     }
 
-    const items = [
-        {
+    const items: {
+        label: string;
+        count: number;
+        href: string;
+        icon: typeof PackageX;
+        tone: string;
+        description: string;
+    }[] = [];
+
+    if (canReadInventory) {
+        items.push({
             label: "Out of Stock SKUs",
             count: data.outOfStock,
             href: "/erp/inventory",
@@ -160,8 +206,11 @@ export function AttentionStrip() {
                 data.outOfStock > 0
                     ? "Items at or below reorder threshold"
                     : "All stock levels healthy",
-        },
-        {
+        });
+    }
+
+    if (canReadFinance) {
+        items.push({
             label: "Overdue Invoices",
             count: data.overdueInvoices,
             href: "/erp/finance",
@@ -174,8 +223,11 @@ export function AttentionStrip() {
                 data.overdueInvoices > 0
                     ? "Invoices past payment terms"
                     : "No overdue receivables",
-        },
-        {
+        });
+    }
+
+    if (canReadCrm) {
+        items.push({
             label: "Open Opportunities",
             count: data.stalledOpportunities,
             href: "/erp/crm/opportunities",
@@ -188,8 +240,11 @@ export function AttentionStrip() {
                 data.stalledOpportunities > 0
                     ? "Active pipeline deals in progress"
                     : "No active pipeline deals",
-        },
-        {
+        });
+    }
+
+    if (canReadSales) {
+        items.push({
             label: "Open Sales Orders",
             count: data.openOrders,
             href: "/erp/orders",
@@ -202,8 +257,8 @@ export function AttentionStrip() {
                 data.openOrders > 0
                     ? "Orders awaiting fulfilment"
                     : "All orders fulfilled",
-        },
-    ];
+        });
+    }
 
     const totalUrgent = data.outOfStock + data.overdueInvoices;
 
@@ -227,7 +282,13 @@ export function AttentionStrip() {
                 </div>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div
+                className={`grid gap-3 ${
+                    items.length <= 2
+                        ? "sm:grid-cols-2"
+                        : "sm:grid-cols-2 lg:grid-cols-4"
+                }`}
+            >
                 {items.map((item) => (
                     <Link
                         key={item.label}

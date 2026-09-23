@@ -154,6 +154,7 @@ export function ErpDashboardClient() {
                         ...item,
                         order: item.order ?? i,
                     }))}
+                    permissions={permissions}
                     onSave={handleSave}
                     onReset={handleReset}
                     onClose={() => {

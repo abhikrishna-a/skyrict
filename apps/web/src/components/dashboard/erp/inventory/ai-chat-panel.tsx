@@ -1,20 +1,36 @@
 "use client";
 
-import { Spinner } from "@/components/ui/spinner";
 import { useState } from "react";
 import { Bot, Send } from "lucide-react";
 
+import { Spinner } from "@/components/ui/spinner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ApiError } from "@/lib/api/http";
 import { queryInventory, type NlQueryResponse } from "@/lib/api/ai-api";
+import { hasAllPermissions, useModuleAccess } from "@/lib/access/modules";
 
+/**
+ * AI proxy surface: the NL query endpoint needs `erp.ai.invoke` AND
+ * `erp.inventory.read`, so the panel renders nothing (fail-closed) until the
+ * effective permission set resolves, and stays hidden when either key is
+ * missing - the backend stays the source of truth, this only prevents the
+ * 403-on-use UX.
+ */
 export function AiChatPanel() {
+    const { status: accessStatus, permissions } = useModuleAccess();
     const [question, setQuestion] = useState("");
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<NlQueryResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
+
+    if (
+        accessStatus !== "ready" ||
+        !hasAllPermissions(permissions, ["erp.ai.invoke", "erp.inventory.read"])
+    ) {
+        return null;
+    }
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

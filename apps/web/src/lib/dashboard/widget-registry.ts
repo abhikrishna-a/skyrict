@@ -32,7 +32,12 @@ export interface WidgetDefinition {
     maxCols: 4;
     /** Grouping for the customize panel. */
     group: "overview" | "modules" | "insights";
-    /** Permission keys required to see this widget. Empty = visible to all. */
+    /**
+     * Permission keys required to see this widget. ALL keys must be granted
+     * (all-of semantics, mirroring the backend's `require_all_permissions`);
+     * empty/absent = visible to all. The Business Pulse digest requires
+     * `erp.ai.invoke` plus every module read the narrator aggregates.
+     */
     permissions?: string[];
 }
 
@@ -85,6 +90,16 @@ export const WIDGET_REGISTRY: WidgetDefinition[] = [
         minCols: 2,
         maxCols: 4,
         group: "insights",
+        // The narrator digest aggregates finance, sales, inventory and CRM data
+        // through the AI proxy, so it needs erp.ai.invoke AND every module read
+        // (backend: `require_all_permissions` on the /ai/narrator/digest route).
+        permissions: [
+            "erp.ai.invoke",
+            "erp.finance.read",
+            "erp.sales.read",
+            "erp.inventory.read",
+            "erp.crm.read",
+        ],
     },
     {
         id: "erp_overview",
@@ -142,7 +157,7 @@ export function getDefaultLayout(): {
     });
 }
 
-/** Filter widgets by a set of permission keys. */
+/** Filter widgets by a set of granted permission keys (all-of per widget). */
 export function filterWidgetsByPermissions(
     layout: {
         id: string;
@@ -157,10 +172,11 @@ export function filterWidgetsByPermissions(
         if (!widget) return false;
         if (!widget.permissions || widget.permissions.length === 0) return true;
         // Owners hold the "*" wildcard and must keep every permission-scoped
-        // widget; otherwise at least one granted key is required.
+        // widget; otherwise EVERY required key must be granted (all-of - the
+        // Business Pulse digest lists five keys, one per narrator source).
         return (
             grantedPermissions.includes("*") ||
-            widget.permissions.some((p) => grantedPermissions.includes(p))
+            widget.permissions.every((p) => grantedPermissions.includes(p))
         );
     });
 }
