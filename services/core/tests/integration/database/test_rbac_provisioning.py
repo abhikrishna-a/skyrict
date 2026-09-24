@@ -466,7 +466,7 @@ class TestSyncRbacFromIdentityReplace:
                 .scalars()
                 .all()
             )
-        assert [uuid.UUID(role_id) for role_id in remaining] == [current_role_id]
+        assert [uuid.UUID(str(role_id)) for role_id in remaining] == [current_role_id]
 
     async def test_reconcile_keeps_grants_identity_still_holds(
         self, tenant: str, migrated_schema: None
@@ -548,4 +548,4 @@ class TestSyncRbacFromIdentityReplace:
                 .scalars()
                 .all()
             )
-        assert [uuid.UUID(role_id) for role_id in remaining] == [role_id]
+        assert [uuid.UUID(str(role_id)) for role_id in remaining] == [role_id]
