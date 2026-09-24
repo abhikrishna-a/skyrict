@@ -346,6 +346,7 @@ def get_member_service(
     audit_service: AuditService = Depends(get_audit_service),
 ) -> MemberService:
     from identity.features.members.service import MemberService
+    from identity.features.roles.rbac_mirror import RbacGrantMirror
 
     return MemberService(
         user_repo,
@@ -353,6 +354,7 @@ def get_member_service(
         role_repo,
         session_service,
         audit_service,
+        grant_mirror=RbacGrantMirror(),
     )
 
 

@@ -201,6 +201,21 @@ class FakeSessionService:
         self.revoked_sessions.append(uuid.UUID(str(session_id)))
 
 
+class FakeGrantMirror:
+    """In-memory RbacGrantMirror double recording replace calls."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[uuid.UUID, uuid.UUID]] = []
+        self.fail = False
+
+    async def replace_user_grants(
+        self, *, tenant_id: str | uuid.UUID, user_id: str | uuid.UUID
+    ) -> None:
+        if self.fail:
+            raise RuntimeError("mirror boom")
+        self.calls.append((uuid.UUID(str(tenant_id)), uuid.UUID(str(user_id))))
+
+
 def _user(tenant_id: uuid.UUID, *, name: str = "Ada Lovelace") -> User:
     return User(
         tenant_id=tenant_id,
@@ -259,14 +274,20 @@ def session_svc() -> FakeSessionService:
 
 
 @pytest.fixture
+def grant_mirror() -> FakeGrantMirror:
+    return FakeGrantMirror()
+
+
+@pytest.fixture
 def service(
     user_repo: FakeUserRepo,
     membership_svc: FakeMembershipService,
     role_repo: FakeRoleRepo,
     session_svc: FakeSessionService,
     audit: FakeAuditService,
+    grant_mirror: FakeGrantMirror,
 ) -> MemberService:
-    return MemberService(user_repo, membership_svc, role_repo, session_svc, audit)
+    return MemberService(user_repo, membership_svc, role_repo, session_svc, audit, grant_mirror)
 
 
 async def test_list_members_resolves_role_and_join_date(
@@ -377,6 +398,7 @@ async def test_change_role_replaces_grant_and_updates_membership(
     role_repo: FakeRoleRepo,
     session_svc: FakeSessionService,
     audit: FakeAuditService,
+    grant_mirror: FakeGrantMirror,
     tenant_id: uuid.UUID,
 ) -> None:
     member = user_repo.add(_user(tenant_id))
@@ -399,6 +421,65 @@ async def test_change_role_replaces_grant_and_updates_membership(
     assert audit.entries[-1]["action"] == "member.role_updated"
     assert audit.entries[-1]["target"] == f"user:{member.id}"
     assert audit.entries[-1]["details"] == {"role": "department_manager"}
+    # The core grant mirror is invoked exactly once, with the member's
+    # tenant+user, so core_user_roles can drop the revoked grant.
+    assert grant_mirror.calls == [(tenant_id, member.id)]
+
+
+async def test_change_role_syncs_grants_to_core(
+    service: MemberService,
+    user_repo: FakeUserRepo,
+    membership_svc: FakeMembershipService,
+    role_repo: FakeRoleRepo,
+    grant_mirror: FakeGrantMirror,
+    tenant_id: uuid.UUID,
+) -> None:
+    member = user_repo.add(_user(tenant_id))
+    old_role = role_repo.add(_role(tenant_id, "standard_user"))
+    role_repo.add(_role(tenant_id, "department_manager"))
+    role_repo.grant(member.id, old_role.id)
+    membership_svc.add(_membership(tenant_id, member, old_role.id, datetime.now(UTC)))
+
+    await service.change_role(
+        tenant_id=tenant_id,
+        user_id=member.id,
+        role_name="department_manager",
+        actor_user_id=uuid.uuid4(),
+    )
+
+    # Layer-2 fix: the swap is mirrored to core in realtime (not only at the
+    # next core boot), so the greeting / require_permission stop seeing the
+    # stale broad role immediately.
+    assert grant_mirror.calls == [(tenant_id, member.id)]
+
+
+async def test_change_role_survives_core_mirror_failure(
+    service: MemberService,
+    user_repo: FakeUserRepo,
+    membership_svc: FakeMembershipService,
+    role_repo: FakeRoleRepo,
+    grant_mirror: FakeGrantMirror,
+    audit: FakeAuditService,
+    tenant_id: uuid.UUID,
+) -> None:
+    member = user_repo.add(_user(tenant_id))
+    old_role = role_repo.add(_role(tenant_id, "standard_user"))
+    new_role = role_repo.add(_role(tenant_id, "department_manager"))
+    role_repo.grant(member.id, old_role.id)
+    membership_svc.add(_membership(tenant_id, member, old_role.id, datetime.now(UTC)))
+    grant_mirror.fail = True
+
+    await service.change_role(
+        tenant_id=tenant_id,
+        user_id=member.id,
+        role_name="department_manager",
+        actor_user_id=uuid.uuid4(),
+    )
+
+    # Best-effort bridge: a failed core mirror must never fail the role change
+    # itself - identity stays the source of truth and the boot reconcile heals.
+    assert role_repo.grants[member.id] == [new_role.id]
+    assert audit.entries[-1]["action"] == "member.role_updated"
 
 
 async def test_change_role_rejects_unknown_role(
