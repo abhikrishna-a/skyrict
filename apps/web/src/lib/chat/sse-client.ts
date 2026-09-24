@@ -198,7 +198,17 @@ export async function streamAgentChat(
         payload.attachments = input.attachments;
     }
 
-    const response = await fetchWithSession("/api/v1/ai/agents/chat/stream", {
+    // Option A (prod): the browser POSTs to the backend's public SSE endpoint
+    // directly instead of relaying through the Vercel (serverless) BFF, so no
+    // serverless function holds the stream open. When the env is unset (dev /
+    // local / existing E2E), this stays the relative BFF path - byte-for-byte
+    // the previous behavior. When set in prod, it is the full public backend
+    // SSE URL (e.g. https://api.skyrict.in/ai/agents/chat/stream) and must be
+    // CORS-enabled for the https://*.skyrict.in origin by the backend/nginx.
+    const streamUrl =
+        process.env.NEXT_PUBLIC_AI_AGENT_CHAT_STREAM_URL ??
+        "/api/v1/ai/agents/chat/stream";
+    const response = await fetchWithSession(streamUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),

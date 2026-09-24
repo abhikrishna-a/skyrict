@@ -1,19 +1,19 @@
-"""Phase-1 RBAC mirror - keep core's ``core_roles`` projection current on edits.
+"""Phase-1 RBAC mirror - keep core's ``core_roles``/``core_user_roles`` current.
 
-Identity owns tenancy + role definitions; core enforces ERP
-``require_permission`` from its own ``core_roles`` / ``core_user_roles``
-tables. That projection is refreshed on grant events, invite accepts, and core
-boot - but a role edit (PATCH ``/roles/{id}``) produced none of those, so core
-kept enforcing the pre-edit permission array: AI permissions added to an
-existing custom role stayed ``403`` until a grant or core restart re-mirrored
-the row.
+Identity owns tenancy, role definitions, and user→role grants; core enforces
+ERP ``require_permission`` from its own ``core_roles`` / ``core_user_roles``
+tables. Those projections are refreshed on grant events, invite accepts, and
+core boot - but a role edit (PATCH ``/roles/{id}``) and a member role change
+(``MemberService.change_role``) produced none of those, so core kept enforcing
+stale state: AI permissions added to a custom role stayed ``403``, and a
+downgraded member kept the old role's grants forever.
 
-This bridge follows the accepted invitation-accept pattern
-(``identity.features.invitations.service``): a direct upsert into
-``core_roles`` over the shared database, REPLACING permissions (never merging)
-so removals propagate too. Failures are logged, never raised - a missing or
-divergent mirror must not fail the role edit; the future event consumer or
-``core provision-rbac`` heals it.
+These bridges follow the accepted invitation-accept pattern
+(``identity.features.invitations.service``): a direct upsert over the shared
+database, REPLACING permissions/grants (never merging) so removals propagate
+too. Failures are logged, never raised - a missing or divergent mirror must
+not fail the edit; the future event consumer or ``core provision-rbac`` heals
+it.
 """
 
 from __future__ import annotations
@@ -71,4 +71,80 @@ class RbacRoleMirror:
                 "rbac_mirror.failed",
                 tenant_id=str(tenant_id),
                 role=role.name,
+            )
+
+
+class RbacGrantMirror:
+    """Phase-1 grant mirror - keep core's ``core_user_roles`` current.
+
+    The Kafka consumer is not wired yet, so role REVOCATIONS never reach core:
+    ``MemberService.change_role`` swaps grants in identity's ``user_roles``
+    only, and core's boot sync used to only ever ADD grants. A downgraded
+    member keeps the old role's grants in ``core_user_roles`` forever - every
+    ``require_permission`` edge and the AI assistant greeting still see the
+    stale, broader access.
+
+    This bridge replaces ONE user's grants to match identity's current
+    ``user_roles`` (identity is authoritative): stale rows are deleted and
+    current rows upserted, using the same direct-upsert-over-shared-DB
+    pattern as ``RbacRoleMirror`` and the invitation-accept mirror. Failures
+    are logged, never raised - the boot reconcile
+    (``core.seed.sync_rbac_from_identity``) or the future event consumer
+    heals it.
+    """
+
+    async def replace_user_grants(
+        self, *, tenant_id: str | uuid.UUID, user_id: str | uuid.UUID
+    ) -> None:
+        """Replace one user's core grants with identity's current set.
+
+        Deletes every ``core_user_roles`` row for the user/tenant that no
+        longer maps to an identity ``user_roles`` row, then upserts the
+        current grants (core role ids resolved by tenant+name, matching the
+        boot sync's composite-PK shapes).
+        """
+        tid = uuid.UUID(str(tenant_id))
+        uid = uuid.UUID(str(user_id))
+        try:
+            async with async_session_factory() as session:
+                await session.execute(
+                    text(
+                        "DELETE FROM core_user_roles cur "
+                        "WHERE cur.tenant_id = :tid AND cur.user_id = :uid "
+                        "AND NOT EXISTS ("
+                        "  SELECT 1 "
+                        "  FROM user_roles ur "
+                        "  JOIN roles r ON r.id = ur.role_id "
+                        "  JOIN core_roles cr ON cr.tenant_id = r.tenant_id AND cr.name = r.name "
+                        "  WHERE ur.tenant_id = cur.tenant_id "
+                        "    AND ur.user_id = cur.user_id "
+                        "    AND cr.id = cur.role_id "
+                        "    AND ur.scope_id IS NOT DISTINCT FROM cur.scope_id "
+                        ")"
+                    ),
+                    {"tid": tid, "uid": uid},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO core_user_roles (tenant_id, id, user_id, role_id, scope_id) "
+                        "SELECT ur.tenant_id, gen_random_uuid(), ur.user_id, cr.id, ur.scope_id "
+                        "FROM user_roles ur "
+                        "JOIN core_roles cr ON cr.tenant_id = ur.tenant_id AND cr.name = "
+                        "  (SELECT r.name FROM roles r WHERE r.id = ur.role_id) "
+                        "WHERE ur.tenant_id = :tid AND ur.user_id = :uid "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    {"tid": tid, "uid": uid},
+                )
+                await session.commit()
+            logger.info(
+                "rbac_mirror.grants_replaced",
+                tenant_id=str(tenant_id),
+                user_id=str(user_id),
+            )
+        except Exception:
+            logger.exception(
+                "rbac_mirror.grant_replace_failed",
+                tenant_id=str(tenant_id),
+                user_id=str(user_id),
             )

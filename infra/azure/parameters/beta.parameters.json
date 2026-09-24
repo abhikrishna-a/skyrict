@@ -18,17 +18,17 @@
       "value": ""
     },
     "baseDomain": {
-      "value": "skyrict.io"
+      "value": "skyrict.in"
     },
     "jwksIssuer": {
-      "value": "https://auth.skyrict.io"
+      "value": "https://auth.skyrict.in"
     },
     "jwksAudience": {
-      "value": "api.skyrict.io"
+      "value": "api.skyrict.in"
     },
     "corsOrigins": {
       "value": [
-        "https://skyrict.vercel.app"
+        "https://skyrict.in"
       ]
     },
     "registrySku": {

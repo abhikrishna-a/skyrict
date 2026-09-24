@@ -1,132 +1,125 @@
 <p align="center">
-  <img src="https://img.shields.io/badge/Stage-Alpha-red?style=flat-square" alt="Alpha"/>
-  <img src="https://img.shields.io/badge/License-Apache%202.0-blue?style=flat-square" alt="License"/>
-  <img src="https://img.shields.io/badge/Python-3.12+-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python"/>
-  <img src="https://img.shields.io/badge/PRs-Welcome-brightgreen?style=flat-square" alt="PRs Welcome"/>
-  <a href="https://github.com/nkswalih/skyrict/actions/workflows/ci-identity.yml"><img src="https://github.com/nkswalih/skyrict/actions/workflows/ci-identity.yml/badge.svg" alt="CI - Identity Service"/></a>
+  <img src="docs/assets/skyrict_logo.svg" width="64" height="64" alt="Skyrict" />
 </p>
 
-<br/>
+<h1 align="center" style="border-bottom: none;">Skyrict</h1>
 
 <p align="center">
-  <h1 align="center">Skyrict</h1>
-  <p align="center">Event-driven business operations platform with integrated market intelligence and autonomous agent execution.</p>
+  <strong>The AI-native business operating system.</strong><br/>
+  ERP · AI agents · Global Market Intelligence Engine (GMIE): one platform.
+</p>
+
+<p align="center">
+  <a href="#quickstart">Quickstart</a> ·
+  <a href="#product-tour">Product tour</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#roadmap">Roadmap</a> ·
+  <a href="CONTRIBUTING.md">Contributing</a>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="License: Apache 2.0" /></a>
+  <a href="CONTRIBUTING.md"><img src="https://img.shields.io/badge/PRs-welcome-brightgreen?style=flat-square" alt="PRs welcome" /></a>
+  <a href="https://www.buymeacoffee.com/nkswalih"><img src="https://img.shields.io/badge/buy%20me%20a%20coffee-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=000000" alt="Buy me a coffee" /></a>
+  <br/>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/python-3.12%2B-3776AB?style=flat-square&logo=python&logoColor=white" alt="Python 3.12+" /></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/fastapi-0.115%2B-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI" /></a>
+  <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/next.js-15-black?style=flat-square&logo=next.js&logoColor=white" alt="Next.js 15" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/typescript-5.7%2B-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript 5.7+" /></a>
+  <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/postgresql-18-4169E1?style=flat-square&logo=postgresql&logoColor=white" alt="PostgreSQL 18" /></a>
+  <a href="https://redis.io/"><img src="https://img.shields.io/badge/redis-8-DC382D?style=flat-square&logo=redis&logoColor=white" alt="Redis 8" /></a>
 </p>
 
 ---
 
-## Overview
+## What is Skyrict
 
-Skyrict is an open-source, AI-native platform that merges business operations (ERP) with real-time market intelligence into a single system. Traditional ERP treats your company as an isolated entity processing internal transactions. Skyrict treats your company as a node in a live global market - ingesting external signals, correlating them with internal operations, and letting AI agents act on the synthesis.
+Skyrict is an open-source, AI-native platform that merges business operations (ERP) with real-time
+market intelligence into a single system. Traditional ERP treats your company as an isolated entity
+processing internal transactions. Skyrict treats your company as a node in a live global market,
+ingesting external signals, correlating them with internal operations, and letting AI agents act on
+the synthesis.
 
----
+It is built as **three pillars that share one data plane**, instead of three disconnected products:
 
-## Repository Structure
-
-```
-skyrict/
-├── apps/                    # Deployable frontend clients
-│   ├── web/                 # Next.js 15 / React 19 / TypeScript
-│   ├── mobile/              # Mobile app scaffold
-│   └── desktop/             # Desktop app scaffold
-│
-├── packages/                # Shared TypeScript packages
-│   ├── api-client/          # Generated from OpenAPI schemas
-│   ├── types/               # Shared TS types/interfaces
-│   ├── ui/                  # Shared React components
-│   └── auth/                # Token storage, refresh logic
-│
-├── services/                # Deployable Python microservices
-│   ├── identity/            # AuthN, AuthZ, MFA, Sessions, Audit
-│   ├── core/                # ERP monolith: inventory, CRM, sales, finance, HR, payroll + /api/v1/ai proxy
-│   ├── ai-agent/            # Provider-agnostic AI service (NL query, restock suggestions, anomaly detection)
-│   └── _template/           # Scaffold copied for every new service, keeps structure consistent
-│
-├── libs/                    # Shared Python packages
-│   ├── skyrict-common/      # Exceptions, logging, pagination, schemas
-│   ├── skyrict-events/      # Kafka event schemas, producer/consumer base classes
-│   └── skyrict-testing/     # Test fixtures, factories, JWT key generation
-│
-├── infra/                   # Infrastructure as Code
-│   ├── docker/              # Docker Compose for local dev
-│   ├── k8s/                 # Kubernetes manifests (base + overlays)
-│   └── terraform/           # Cloud infrastructure
-│
-├── docs/
-│   ├── architecture/adr/    # Architecture Decision Records
-│   └── handbooks/           # Product & engineering handbooks
-│
-├── .github/                 # GitHub governance & CI
-│   ├── workflows/           # CI/CD workflows
-│   ├── CODEOWNERS           # Team-based review routing
-│   └── dependabot.yml       # Automated dependency updates
-│
-├── pyproject.toml           # uv workspace root
-├── package.json             # pnpm workspace root
-├── turbo.json               # Frontend task pipeline
-├── Makefile                 # Single entrypoint for all dev commands
-└── ...
-```
-
-### Identity Service Layering
-
-```
-services/identity/src/identity/
-├── api/              # FastAPI routes, dependency injection
-├── core/             # Config, security, middleware, tenant context
-├── domain/           # Pure Python entities and value objects
-├── services/         # Application/use-case layer (business logic)
-├── repositories/     # DB access only (no business logic)
-├── models/           # SQLAlchemy ORM models
-├── schemas/          # Pydantic request/response DTOs
-├── events/           # Kafka event producers/consumers
-└── db/               # Async engine, session factory, RLS
-```
-
-Why this layering: `api → services → repositories → models`. Business logic never touches the DB directly. JWT verification happens in exactly one place (`core/security.py`). Tenant context flows through a ContextVar, not function parameters.
+| Pillar | Layer | What it does | Status |
+| --- | --- | --- | --- |
+| **ERP** | Operations | Finance, inventory, CRM, sales, HR & payroll, documents and approvals on a multi-tenant core with Row-Level Security | Live |
+| **AI Agents** | Automation | Natural-language queries, restock suggestions, anomaly detection, coaching and guardian agents over a provider-agnostic LLM layer | Live |
+| **GMIE** | Intelligence | The Global Market Intelligence Engine: market signals, competitor analysis, trend detection, risk assessment and opportunity finding that feed the other two pillars | In progress |
 
 ---
 
-## Tech Stack
+## Why Skyrict
 
-| Layer                  | Choice                                                                |
-| ---------------------- | --------------------------------------------------------------------- |
-| Python package manager | **uv** (workspaces, single lockfile)                                  |
-| Language               | Python 3.12+ / TypeScript 5.7+                                        |
-| Web framework          | FastAPI (async, type-safe, OpenAPI)                                   |
-| ORM                    | SQLAlchemy 2.0 (async) + Alembic                                      |
-| Frontend               | Next.js 15 / React 19 / shadcn/ui                                     |
-| Frontend tooling       | pnpm + Turborepo                                                      |
-| OLTP                   | PostgreSQL 16 + Row-Level Security                                    |
-| Cache                  | Redis 7                                                               |
-| Event bus              | Kafka 3.x (KRaft mode) - deferred until 3+ services need async events |
-| CI/CD                  | GitHub Actions (path-filtered)                                        |
-| Containers             | Docker                                                                |
+| | Traditional ERP | Skyrict |
+| --- | --- | --- |
+| View of the company | An isolated entity processing internal transactions | A node in a live global market |
+| Data | Internal operations only | Internal operations + external market signals |
+| Analytics | Descriptive: what happened | Prescriptive: what to do about it |
+| AI | Bolt-on chat or report generation | Native layer that reads the same data and acts |
+| Tenancy | One deployment per customer | Multi-tenant, Row-Level Security, one codebase |
+| Decision loop | Humans read dashboards, then act | Agents correlated with live signals act, humans supervise |
+
+Every module lives in one event-driven workspace, so a finance decision and a market signal are part
+of the same system: not two tabs in two products.
 
 ---
 
-## Prerequisites
+## Product tour
 
-- Python 3.12+
-- Node.js 20+
-- Docker & Docker Compose v2
-- [uv](https://docs.astral.sh/uv/getting-started/installation/) (`curl -LsSf https://astral.sh/uv/install.sh | sh`)
-- pnpm (`npm install -g pnpm`)
+<p align="center">
+  <img src="docs/assets/screenshots/marketing.png" alt="Skyrict marketing landing page" width="100%" />
+  <br/>
+  <sub><b>Marketing</b>: the public website with hero, product pillars, pricing and contact.</sub>
+</p>
 
-## Quick Start
+<table>
+  <tr>
+    <td width="50%">
+      <img src="docs/assets/screenshots/erp-finance.png" alt="ERP finance workspace" width="100%" />
+      <br/>
+      <sub><b>ERP: Finance</b> · invoices, journal entries, budgets, statements and audit logs.</sub>
+    </td>
+    <td width="50%">
+      <img src="docs/assets/screenshots/ai-agents.png" alt="AI agents workspace" width="100%" />
+      <br/>
+      <sub><b>AI Agents</b> · natural-language queries, restock suggestions, guardian and coaching.</sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%">
+      <img src="docs/assets/screenshots/intelligence.png" alt="GMIE intelligence pages" width="100%" />
+      <br/>
+      <sub><b>GMIE</b> · market, trending and explore: the intelligence layer.</sub>
+    </td>
+    <td width="50%">
+      <img src="docs/assets/screenshots/erp-crm.png" alt="ERP CRM & sales workspace" width="100%" />
+      <br/>
+      <sub><b>ERP: CRM &amp; Sales</b> · leads, opportunities, customers and the sales pipeline.</sub>
+    </td>
+  </tr>
+</table>
+
+---
+
+## Quickstart
+
+**Prerequisites:** Python 3.12+, Node.js 20+, Docker & Docker Compose v2,
+[uv](https://docs.astral.sh/uv/getting-started/installation/), pnpm.
 
 ```bash
 git clone https://github.com/nkswalih/skyrict.git
 cd skyrict
 
-# 1. Install all dependencies
+# 1. Install dependencies, boot infra, run migrations
 make setup
 
-# 2. Configure the local environment
+# 2. Configure environment + generate JWT keys once
 cp services/identity/.env.example services/identity/.env
-uv run python -m skyrict_testing.generate_keys  # JWT RS256 keys -> .dev/keys/ (gitignored)
+uv run python -m skyrict_testing.generate_keys
 
-# 3. Start dev servers (infra + identity service)
+# 3. Start the backend (infra + identity service)
 make dev
 
 # 4. In another terminal, start the frontend
@@ -136,88 +129,116 @@ make dev-web
 - API docs: `http://localhost:8000/docs`
 - Frontend: `http://localhost:3000`
 
-### Local Multi-Tenant Routing
+Everything runs through the **Makefile**: see [Development](#development) for the full target list.
 
-The identity service is multi-tenant: in production each tenant reaches it via
-its own subdomain (`https://acme.skyrict.com/...`), and the ingress injects an
-`X-Tenant-Slug` header before forwarding. The dev stack mirrors that contract
-so tenant resolution behaves identically locally and in production - no
-staging DNS required.
+<details>
+<summary><strong>Local multi-tenant routing</strong>: subdomain-based tenant isolation on localhost</summary>
 
-`docker compose` (dev) starts an `nginx` proxy (see `infra/nginx/dev.conf`)
-that routes `*.localhost` subdomains to the identity service and derives
-`X-Tenant-Slug` from the subdomain. No `/etc/hosts` edits are needed on
-most machines: modern OSes resolve `*.localhost` to `127.0.0.1` automatically.
-If yours doesn't, add the sample tenants to your hosts file instead
-(`127.0.0.1 acme.localhost globex.localhost`).
+The identity service is multi-tenant: in production each tenant reaches it via its own subdomain
+(`https://acme.skyrict.com/...`) and the ingress injects an `X-Tenant-Slug` header before forwarding.
+The dev stack mirrors that contract locally, so tenant resolution behaves identically in both
+environments.
+
+`docker compose` (dev) starts an `nginx` proxy (see `infra/nginx/dev.conf`) that routes `*.localhost`
+subdomains to the identity service and derives `X-Tenant-Slug` from the subdomain, so no `/etc/hosts`
+edits are needed on most machines (`*.localhost` resolves to `127.0.0.1` automatically).
 
 ```bash
-# Boot the full stack (Postgres, Redis, identity service, nginx)
 docker compose -f infra/docker/docker-compose.yml -f infra/docker/docker-compose.dev.yml up -d
 
-# Hit two different fake tenant subdomains
-curl -s http://acme.localhost/api/v1/health
-curl -s http://globex.localhost/api/v1/health
-# Both reach the identity service; the first carries X-Tenant-Slug: acme,
-# the second X-Tenant-Slug: globex. Watch per-subdomain traffic with:
-docker logs -f skyrict-nginx
+curl -s http://acme.localhost/api/v1/health      # X-Tenant-Slug: acme
+curl -s http://globex.localhost/api/v1/health    # X-Tenant-Slug: globex
 ```
 
-**Path-based fallback** - for environments without wildcard DNS, prefix the
-path with the tenant slug. Nginx strips the prefix and injects the header:
+**Path-based fallback** (no wildcard DNS): `http://localhost/acme/api/v1/health` →
+`/api/v1/health` + `X-Tenant-Slug: acme`.
+
+**Port 80 in use?** Set `NGINX_PORT=8080` in `infra/docker/.env`, then use
+`http://acme.localhost:8080/docs`.
+
+The tenant is resolved **once per request in middleware** and cross-checked against the JWT
+`tenant_id` claim on every authenticated request; a mismatch is rejected with 401. See the
+[identity service README](services/identity/README.md) for details.
+</details>
+
+<details>
+<summary><strong>Manual setup</strong>: if you prefer running each step yourself</summary>
 
 ```bash
-# http://localhost/acme/login          -> /api/v1/auth/login  + X-Tenant-Slug: acme
-# http://localhost/acme/api/v1/health  -> /api/v1/health      + X-Tenant-Slug: acme
-curl -s http://localhost/acme/api/v1/health
+uv sync                                            # Python deps
+cd apps/web && pnpm install                        # Frontend deps
+docker compose -f infra/docker/docker-compose.yml up -d   # Postgres + Redis
+make migrate                                       # Alembic migrations
+make dev                                           # Start backend
+make dev-web                                       # Start frontend
 ```
+</details>
 
-**Port 80 already in use?** Set a different host port - e.g. add
-`NGINX_PORT=8080` to `infra/docker/.env` (or export it in your shell), then
-use `http://acme.localhost:8080/docs`.
+---
 
-> The service resolves the tenant **once per request in middleware**: in
-> staging/production from the `Host` subdomain (first label of
-> `IDENTITY_BASE_DOMAIN`, e.g. `acme.skyrict.com` → `acme`), and in dev/test
-> from the `X-Tenant-Slug` header that nginx injects - there is no bypass path
-> in any environment. The resolved tenant is stored in `TenantContext` and
-> cross-checked against the JWT `tenant_id` claim on every authenticated
-> request; a mismatch is rejected with 401 (RFC 7807
-> `application/problem+json`). See the
-> [identity service README](services/identity/README.md) for details.
+## Features
 
-### Manual Setup
+Three layers, one data plane. Status legend: **Live** · **In progress** · **Planned**.
 
-```bash
-# Python deps
-uv sync
+### Operations: ERP
 
-# Frontend deps
-cd apps/web && pnpm install
+| | | |
+| --- | --- | --- |
+| **Finance** · Live<br/>Invoices, journal entries, budgets, expenses, accounts, assets, statements, controls, audit log, compliance | **Inventory** · Live<br/>Products, warehouses, movements, suppliers, stock health, ABC analysis, demand forecast | **CRM & Sales** · Live<br/>Leads, opportunities, contacts, customers, activities, orders, approvals, AI-assisted pipeline |
+| **HR & Payroll** · Live<br/>Leave, planning, payroll runs, reviews, compensation, anomalies | **Procurement** · Planned<br/>Purchasing reusing stock and order primitives | **Documents & Reports** · Live<br/>Document workspace and a report center over live data |
 
-# Boot infrastructure (Postgres, Redis)
-docker compose -f infra/docker/docker-compose.yml up -d
-# Kafka is intentionally deferred - see "Roadmap & Scope" below.
+### Identity & security
 
-# Run migrations
-make migrate
+| | | |
+| --- | --- | --- |
+| **Authentication** · Live<br/>JWT (RS256, access + refresh), registration, login, logout | **MFA & sessions** · Live<br/>TOTP enroll/verify, session management and revocation | **RBAC role builder** · Live<br/>Custom roles composed from a fixed permission menu |
+| **Multi-tenant RLS** · Live<br/>Tenant context via `ContextVar`, every query scoped by PostgreSQL RLS | **Audit & invites** · Live<br/>Audit logging and member invitations | **SSO & passkeys** · In progress<br/>OIDC/SAML and passkey stubs behind the same permission model |
 
-# Start identity service
-make dev
-```
+### AI agents: automation layer
+
+| | | |
+| --- | --- | --- |
+| **Provider-agnostic LLM routing** · Live<br/>OpenRouter, Groq, OpenAI, or local Ollama behind one interface with a primary → fallback chain | **Natural-language queries** · Live<br/>Ask your inventory in plain English and get structured answers | **Restock suggestions** · Live<br/>Recommend replenishment from current stock and demand signals |
+| **Anomaly detection** · Live<br/>Flag unusual stock movement for review | **Guardian & coaching consoles** · In progress<br/>Agent workspaces in the web app | **RAG / LangGraph agents** · Planned<br/>Document-grounded agents with tool-use orchestration |
+
+### Intelligence: GMIE
+
+| | | |
+| --- | --- | --- |
+| **Intelligence workspace** · In progress<br/>Market, trending, explore, and results pages in the web app | **Signal collection engine** · Planned<br/>Ingest external market signals with scoring and correlation | **Competitor & trend analysis** · Planned<br/>Detect moves and trends from collected signals |
+| **Risk assessment** · Planned<br/>Score exposure and risk from combined signals | **Opportunity finding** · Planned<br/>Surface actionable opportunities to the ERP layer | **Event-driven topics** · Planned<br/>Kafka bus for async signal → operation flows |
+
+Every capability above maps to a real surface in the repo: module specs live in
+[`docs/modules/`](docs/modules/), and the release history is in [`CHANGELOG.md`](CHANGELOG.md).
+
+---
+
+## Architecture
+
+Three services behind one API: **identity** (auth, MFA, RBAC, tenants), **core** (ERP),
+and **ai-agent** (provider-agnostic LLM), sharing PostgreSQL with Row-Level Security and Redis.
+
+- **Multi-tenancy by default.** Every tenant-scoped table carries a `tenant_id`; RLS scopes every
+  query to the current tenant. One codebase serves all customers.
+- **AI behind authorization.** The frontend never calls `ai-agent` directly, requests go through
+  `core` (`/api/v1/ai/*`), which enforces `erp.ai.invoke` plus the module permission *before*
+  forwarding and re-relays the caller's JWT. Agents can never bypass human authorization.
+- **Event-driven by design.** Domain events use `{domain}.{entity}.{action}` naming
+  (`identity.user.created`, `inventory.stock.level_changed`) on a Kafka bus that goes live once
+  async coupling is needed.
+
+See [`docs/architecture/`](docs/architecture/) for ADRs and the [product handbook](docs/handbooks/).
 
 ---
 
 ## Development
 
 ```bash
-# Install git hooks (run once after clone)
-./scripts/setup-hooks.sh        # Unix/macOS
-.\scripts\setup-hooks.ps1       # Windows
+./scripts/setup-hooks.sh      # macOS/Linux: install git hooks once
+.\scripts\setup-hooks.ps1     # Windows
 
-# Common tasks
 make setup          # Install deps, create DB, run migrations
-make dev            # Start identity service in dev mode
+make dev            # Start backend (infra + identity service) in dev mode
 make dev-web        # Start Next.js dev server
 make dev-all        # Start everything
 make test           # Run all tests
@@ -226,153 +247,99 @@ make test-cov       # Tests with coverage
 make lint           # Ruff + mypy
 make format         # Auto-format code
 make migrate        # Run pending Alembic migrations
-make migrate-create MSG="add users table"  # Create new migration
+make migrate-create MSG="add users table"   # Create a new migration
 make seed           # Load reference data
 make build          # Build Docker image
 make check          # Full CI check (lint + test)
 make clean          # Remove build artifacts
-make help           # Show all available targets
+make help           # Show all targets
 ```
 
-### Git Hooks
+Pre-commit hooks run Ruff lint/format, mypy, file validation and conventional-commit checks.
+Branch protection requirements (PR-only workflow, required reviews, CI checks) are in
+[`docs/setup/branch-protection.md`](docs/setup/branch-protection.md).
+
+### AI Agent service (local dev)
+
+The `ai-agent` service (port 8002) is provider-agnostic: any OpenAI-compatible endpoint works
+(OpenRouter, Groq, OpenAI, or local Ollama). With no provider configured the service boots and
+serves health; AI calls then return a typed `503 ai_unavailable`.
 
 ```bash
-./scripts/setup-hooks.sh        # Unix/macOS
-.\scripts\setup-hooks.ps1       # Windows
-```
-
-Pre-commit hooks: Ruff lint, Ruff format, mypy, YAML/JSON/TOML validation, large file check, direct push block, conventional commit lint.
-
-### AI Agent Service (local dev)
-
-The `ai-agent` service (port 8002) hosts the AI assistant features - natural-language inventory queries, restock suggestions, stock anomaly detection. It is provider-agnostic: any OpenAI-compatible endpoint works (OpenRouter, Groq, OpenAI, or a local Ollama via its OpenAI-compatible API). With no provider configured the service boots and serves health; AI calls then return a typed `503 ai_unavailable`.
-
-```bash
-# Required
-AI_DATABASE_URL=postgresql+asyncpg://...       # ai-agent's own DB (owns alembic branch ai_agent)
-AI_REDIS_URL=redis://localhost:6379/0          # distributed rate limiting
+AI_DATABASE_URL=postgresql+asyncpg://...     # ai-agent's own DB
+AI_REDIS_URL=redis://localhost:6379/0        # distributed rate limiting
 AI_JWT_PUBLIC_KEY_PATH=./secrets/jwt_public.pem
 AI_JWKS_ISSUER=https://auth.skyrict.io
 AI_JWKS_AUDIENCE=api.skyrict.io
-
-# Core data plane (compose contract: unprefixed INVENTORY_SERVICE_URL /
-# REPORT_SERVICE_URL - both APIs live on the core monolith)
-INVENTORY_SERVICE_URL=http://localhost:8001
-REPORT_SERVICE_URL=http://localhost:8001
-
-# Provider (optional at boot)
-AI_PROVIDER=openrouter                          # or groq/openai/omniroute/agentrouter/generic
+AI_PROVIDER=openrouter                       # or groq/openai/omniroute/agentrouter/generic
 AI_MODEL=meta-llama/llama-3-8b-instruct
 AI_API_KEY=sk-or-...
-# AI_FALLBACK_PROVIDER / AI_FALLBACK_MODEL / AI_FALLBACK_API_KEY for failover
 
-# Docker compose dev (infra/docker/docker-compose.dev.yml) keeps the provider
-# config from services/ai-agent/.env (env_file) but applies two container-only
-# corrections: the primary's AI_BASE_URL is redirected to host.docker.internal
-# (a host-local gateway like omniroute@localhost:20128 is unreachable as
-# localhost from inside the container) and the groq fallback is pinned to a
-# current groq model (qwen/qwen3.8-27b - llama-3.1-8b-instant no longer
-# exists). Values above apply to host-run `uv run ai-agent`; the container
-# inherits the same .env.
-
-# Run + migrate
-uv run ai-agent serve                                 # from services/ai-agent (typer CLI)
+uv run ai-agent serve                        # from services/ai-agent (typer CLI)
 uv run ai-agent migrate
 ```
 
-Frontend/BFF never calls ai-agent directly: requests go through core (`/api/v1/ai/*`), which enforces `erp.ai.invoke` plus the module permission BEFORE forwarding and re-relays the caller's JWT (the AI service re-verifies it). Docker wiring lives in [infra/docker/docker-compose.dev.yml](infra/docker/docker-compose.dev.yml) (`skyrict-ai-agent`, port 8002→8000). Feature spec: [docs/modules/skyrict-ai/inventory-ai-features.md](docs/modules/skyrict-ai/inventory-ai-features.md).
-
-### Branch Protection
-
-See [docs/setup/branch-protection.md](docs/setup/branch-protection.md) for required GitHub repository settings to enforce PR-only workflow, required reviews, and CI checks.
+Full wiring (including the compose contract and the `/api/v1/ai/*` permission proxy) is in the
+[ai-agent README](services/ai-agent/README.md) and
+[docs/modules/skyrict-ai/](docs/modules/skyrict-ai/).
 
 ---
 
-## Architecture
+## Roadmap & scope
 
-### Target Architecture (Roadmap)
+Skyrict is deliberately **MVP-first**: ship a small, secure, well-tested core before expanding scope.
 
-Not all of these exist yet - this is the intended end state. Today only `identity` is in active development.
-
-```
-services/
-├── identity/          # Auth, JWT, OAuth2, RBAC, multi-tenancy   (in active development)
-├── core/              # ERP domain (finance, inventory, procurement)   (planned)
-└── intelligence/      # Signal collection, NLP, scoring, knowledge graph   (planned)
-```
-
-Future (aspirational - not yet explicitly scoped):
-
-```
-services/
-├── agents/            # LLM orchestration, tool registry, guardrails
-└── analytics/         # OLAP queries, materialized views
-```
-
-### Event-Driven Communication
-
-Every domain service emits structured events to Kafka. No direct database reads between services.
-
-```
-Topic naming: {domain}.{entity}.{action}
-
-Examples:
-  identity.user.created
-  identity.auth.login_success
-  inventory.stock.level_changed
-  finance.journal_entry.posted
-```
-
-### Multi-Tenancy
-
-Row-Level Security (RLS) on PostgreSQL. Every query is scoped to the current tenant via `SET app.current_tenant_id`. Tenant context flows through a `ContextVar`, not function parameters.
-
----
-
-## Roadmap & Scope
-
-Skyrict is deliberately MVP-first: ship a small, secure, well-tested core before expanding scope. The following are intentionally deferred until a concrete need justifies them: SSO (SAML/OIDC), OPA policy engine, HashiCorp Vault, Kafka event bus (once 3+ services need decoupled async events), SCIM provisioning, and adaptive risk scoring.
+- **Done**: Identity platform (JWT, MFA, RBAC role builder, multi-tenant RLS), ERP foundations
+  (finance, inventory, CRM/sales, HR/payroll), provider-agnostic AI agent layer, web app, CI/CD on all
+  four surfaces.
+- **In progress**: GMIE intelligence workspace, agent consoles (guardian/coaching), web polish.
+- **Planned**: GMIE signal-collection engine, RAG/LangGraph agents, OLAP/analytics, embedded
+  event bus usage once 3+ services need async events.
+- **Deferred until a concrete need justifies them**: SSO (SAML/OIDC), OPA policy engine,
+  HashiCorp Vault, SCIM provisioning, adaptive risk scoring.
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development workflow, code standards, and PR process.
-
----
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the development workflow, code standards, and PR process.
+Bug reports and feature requests use the issue templates; the project is CI-gated on every surface.
 
 ## Security
 
-To report a vulnerability, see [SECURITY.md](SECURITY.md). Do **not** open a public issue for security reports.
-
----
-
-## License & Trademarks
-
-Apache License 2.0. See [LICENSE](LICENSE).
-
-Skyrict trademarks and usage guidelines: [TRADEMARK.md](TRADEMARK.md).
-
----
-
-<p align="center">
-  <a href="https://github.com/nkswalih/skyrict/stargazers">
-    <img alt="Stars" src="https://img.shields.io/github/stars/nkswalih/skyrict?style=social"/>
-  </a>
-  <a href="https://github.com/nkswalih/skyrict/network/members">
-    <img alt="Forks" src="https://img.shields.io/github/forks/nkswalih/skyrict?style=social"/>
-  </a>
-  <a href="https://github.com/nkswalih/skyrict/issues">
-    <img alt="Issues" src="https://img.shields.io/github/issues/nkswalih/skyrict"/>
-  </a>
-</p>
-
----
+To report a vulnerability, see [SECURITY.md](SECURITY.md). Do **not** open a public issue for
+security reports.
 
 ## Contributors
 
+Skyrict is built by an open community: thank you to everyone who has shipped code, docs, and ideas.
+
 <p align="center">
-  <a href="https://github.com/nkswalih/skyrict/graphs/contributors">
-    <img src="https://contrib.rocks/image?repo=nkswalih/skyrict" alt="Contributors" title="All contributors"/>
+  <a href="https://github.com/nkswalih" title="nkswalih"><img src="https://avatars.githubusercontent.com/u/235286854?v=4&s=80" width="64" height="64" alt="nkswalih" /></a>
+  <a href="https://github.com/dennisjoseph2025" title="dennisjoseph2025"><img src="https://avatars.githubusercontent.com/u/232787568?v=4&s=80" width="64" height="64" alt="dennisjoseph2025" /></a>
+  <a href="https://github.com/abhikrishna-a" title="abhikrishna-a"><img src="https://avatars.githubusercontent.com/u/231668928?v=4&s=80" width="64" height="64" alt="abhikrishna-a" /></a>
+  <a href="https://github.com/ABHINAV9496" title="ABHINAV9496"><img src="https://avatars.githubusercontent.com/u/132831157?v=4&s=80" width="64" height="64" alt="ABHINAV9496" /></a>
+</p>
+
+<p align="center">
+  <sub>See the <a href="https://github.com/nkswalih/skyrict/graphs/contributors">full contributor graph</a>. Contributions welcome.</sub>
+</p>
+
+---
+
+## Support the Project
+
+If Skyrict helps your business or research, consider supporting independent development:
+
+<p align="left">
+  <a href="https://www.buymeacoffee.com/nkswalih" target="_blank">
+    <img src="https://img.buymeacoffee.com/button-api/?text=Buy%20me%20a%20coffee&emoji=&slug=nkswalih&button_colour=FFDD00&font_colour=000000&font_family=Cookie&outline_colour=000000&coffee_colour=ffffff" alt="Buy Me A Coffee" />
   </a>
 </p>
+
+---
+
+## License
+
+Apache License 2.0: see [LICENSE](LICENSE). Skyrict trademarks and usage guidelines:
+[TRADEMARK.md](TRADEMARK.md).

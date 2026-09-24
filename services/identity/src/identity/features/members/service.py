@@ -12,10 +12,13 @@ import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+import structlog
+
 from identity.core.audit_events import MEMBER_REMOVED, MEMBER_ROLE_UPDATED
 from identity.core.state_machine import InvalidTransitionError
 from identity.domain.entities import MembershipStatus, User
 from identity.features.members.schemas import MemberResponse
+from identity.features.roles.rbac_mirror import RbacGrantMirror
 from skyrict_common.exceptions import UserNotFoundError, ValidationError
 
 if TYPE_CHECKING:
@@ -25,6 +28,8 @@ if TYPE_CHECKING:
     from identity.features.roles.repository import RoleRepository
     from identity.features.sessions.service import SessionService
     from identity.features.users.ports import UserRepositoryPort
+
+logger = structlog.get_logger("identity.members.service")
 
 TENANT_OWNER = "tenant_owner"
 
@@ -39,12 +44,14 @@ class MemberService:
         role_repo: RoleRepository,
         session_service: SessionService,
         audit_service: AuditService,
+        grant_mirror: RbacGrantMirror | None = None,
     ) -> None:
         self.user_repo = user_repo
         self.membership_service = membership_service
         self.role_repo = role_repo
         self.session_service = session_service
         self.audit_service = audit_service
+        self._grant_mirror = grant_mirror or RbacGrantMirror()
 
     async def list_members(
         self, tenant_id: str | uuid.UUID, viewer_id: str | uuid.UUID
@@ -123,6 +130,23 @@ class MemberService:
             tenant_id=tenant_id,
             scope_id=uuid.UUID(str(tenant_id)),
         )
+
+        # Phase-1 bridge: mirror the swapped grant set into core's
+        # core_user_roles (identity is authoritative) so the downgrade takes
+        # effect immediately instead of at the next core boot. Best-effort -
+        # a failed or raising mirror must never fail the role change itself;
+        # identity stays the source of truth and the boot reconcile heals.
+        try:
+            await self._grant_mirror.replace_user_grants(
+                tenant_id=tenant_id,
+                user_id=user_id,
+            )
+        except Exception:
+            logger.exception(
+                "member.change_role.grant_mirror_failed",
+                tenant_id=str(tenant_id),
+                user_id=str(user_id),
+            )
 
         membership = await self.membership_service.get_by_user(user_id, tenant_id)
         if membership is not None and membership.id is not None:
