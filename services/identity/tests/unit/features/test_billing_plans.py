@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from identity.core.config import settings
+from identity.core.config import Settings
 from identity.features.billing.plans import (
     CURRENCY_LOCALES,
     PLAN_ID_MAP,
@@ -103,8 +103,13 @@ def test_module_escalation() -> None:
 
 
 def test_default_currency_is_usd() -> None:
-    """Catalog prices are cents; the configured currency defaults to usd."""
-    assert settings.BILLING_CURRENCY == "usd"
+    """Catalog prices are cents; the configured currency defaults to usd.
+
+    Asserts the schema default (not the ambient runtime value), because a
+    deployment may legitimately override BILLING_CURRENCY via env/.env
+    (e.g. ``inr``) without changing the catalog default.
+    """
+    assert Settings.model_fields["BILLING_CURRENCY"].default == "usd"
 
 
 def test_every_plan_prices_all_priced_currencies() -> None:
