@@ -373,3 +373,179 @@ class TestSyncRbacFromIdentityReplace:
                 )
             ).scalar_one()
         assert sorted(row) == ["erp.finance.read"]
+
+    async def test_stale_grant_removed_after_role_revocation(
+        self, tenant: str, migrated_schema: None
+    ) -> None:
+        """A revoked identity grant must disappear from core_user_roles.
+
+        Regression for the IAM downgrade bug: identity revoked the member's
+        broad role, but core_user_roles kept the stale grant forever, so the
+        AI greeting and ERP checks kept seeing the old, wider access.
+        """
+        from core.seed import sync_rbac_from_identity
+
+        tenant_id = uuid.UUID(tenant)
+        user_id = uuid.uuid4()
+        stale_role_id = uuid.uuid4()
+        current_role_id = uuid.uuid4()
+
+        async with async_session_factory() as session:
+            await session.execute(
+                text(
+                    "INSERT INTO users (id, tenant_id, email, password_hash, full_name) "
+                    "VALUES (:uid, :tid, :email, :hash, :name)"
+                ),
+                {
+                    "uid": user_id,
+                    "tid": tenant_id,
+                    "email": "stale-grant@skyrict.integration.test",
+                    "hash": "not-a-real-hash",
+                    "name": "stale-grant",
+                },
+            )
+            # Identity is authoritative: the member now ONLY holds the narrow role.
+            await session.execute(
+                text(
+                    "INSERT INTO roles (id, tenant_id, name, permissions, is_system_role) "
+                    "VALUES (:rid, :tid, :rname, :perms, false)"
+                ),
+                {
+                    "rid": current_role_id,
+                    "tid": tenant_id,
+                    "rname": "crm_reader",
+                    "perms": ["erp.crm.read"],
+                },
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO user_roles (id, tenant_id, user_id, role_id, scope_type, scope_id) "
+                    "VALUES (gen_random_uuid(), :tid, :uid, :rid, 'tenant', :tid)"
+                ),
+                {"tid": tenant_id, "uid": user_id, "rid": current_role_id},
+            )
+            # Core projection is STALE - still holds the revoked broad role too.
+            for role_id, name, perms in (
+                (stale_role_id, "organization_admin", ["erp.inventory.read"]),
+                (current_role_id, "crm_reader", ["erp.crm.read"]),
+            ):
+                await session.execute(
+                    text(
+                        "INSERT INTO core_roles (tenant_id, id, name, permissions, is_system_role) "
+                        "VALUES (:tid, :rid, :rname, :perms, false)"
+                    ),
+                    {
+                        "tid": tenant_id,
+                        "rid": role_id,
+                        "rname": name,
+                        "perms": perms,
+                    },
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO core_user_roles (tenant_id, id, user_id, role_id, scope_id) "
+                        "VALUES (:tid, gen_random_uuid(), :uid, :rid, :tid)"
+                    ),
+                    {"tid": tenant_id, "uid": user_id, "rid": role_id},
+                )
+            await session.commit()
+
+        await sync_rbac_from_identity()
+
+        async with async_session_factory() as session:
+            remaining = (
+                (
+                    await session.execute(
+                        text(
+                            "SELECT role_id FROM core_user_roles "
+                            "WHERE tenant_id = :tid AND user_id = :uid"
+                        ),
+                        {"tid": tenant_id, "uid": user_id},
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert [uuid.UUID(role_id) for role_id in remaining] == [current_role_id]
+
+    async def test_reconcile_keeps_grants_identity_still_holds(
+        self, tenant: str, migrated_schema: None
+    ) -> None:
+        """A fully-current grant survives reconciliation untouched."""
+        from core.seed import sync_rbac_from_identity
+
+        tenant_id = uuid.UUID(tenant)
+        user_id = uuid.uuid4()
+        role_id = uuid.uuid4()
+
+        async with async_session_factory() as session:
+            await session.execute(
+                text(
+                    "INSERT INTO users (id, tenant_id, email, password_hash, full_name) "
+                    "VALUES (:uid, :tid, :email, :hash, :name)"
+                ),
+                {
+                    "uid": user_id,
+                    "tid": tenant_id,
+                    "email": "current-grant@skyrict.integration.test",
+                    "hash": "not-a-real-hash",
+                    "name": "current-grant",
+                },
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO roles (id, tenant_id, name, permissions, is_system_role) "
+                    "VALUES (:rid, :tid, :rname, :perms, false)"
+                ),
+                {
+                    "rid": role_id,
+                    "tid": tenant_id,
+                    "rname": "data_reader",
+                    "perms": ["erp.crm.read"],
+                },
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO user_roles (id, tenant_id, user_id, role_id, scope_type, scope_id) "
+                    "VALUES (gen_random_uuid(), :tid, :uid, :rid, 'tenant', :tid)"
+                ),
+                {"tid": tenant_id, "uid": user_id, "rid": role_id},
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO core_roles (tenant_id, id, name, permissions, is_system_role) "
+                    "VALUES (:tid, :rid, :rname, :perms, false)"
+                ),
+                {
+                    "tid": tenant_id,
+                    "rid": role_id,
+                    "rname": "data_reader",
+                    "perms": ["erp.crm.read"],
+                },
+            )
+            await session.execute(
+                text(
+                    "INSERT INTO core_user_roles (tenant_id, id, user_id, role_id, scope_id) "
+                    "VALUES (:tid, gen_random_uuid(), :uid, :rid, :tid)"
+                ),
+                {"tid": tenant_id, "uid": user_id, "rid": role_id},
+            )
+            await session.commit()
+
+        await sync_rbac_from_identity()
+
+        async with async_session_factory() as session:
+            remaining = (
+                (
+                    await session.execute(
+                        text(
+                            "SELECT role_id FROM core_user_roles "
+                            "WHERE tenant_id = :tid AND user_id = :uid"
+                        ),
+                        {"tid": tenant_id, "uid": user_id},
+                    )
+                )
+                .scalars()
+                .all()
+            )
+        assert [uuid.UUID(role_id) for role_id in remaining] == [role_id]

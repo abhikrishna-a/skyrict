@@ -592,8 +592,11 @@ async def sync_rbac_from_identity() -> None:
     Idempotent: safe to re-run on every startup. Core's role IDs are never
     overwritten (preserving FK references). Role permission arrays are
     REPLACED from identity (the authoritative catalog) on every boot, so
-    edits - including removals - propagate; missing grants are added and
-    existing ones are left untouched.
+    edits - including removals - propagate. Grants are RECONCILED, never
+    merged: missing grants are added and stale grants - rows identity no
+    longer holds because a role was revoked or a member downgraded - are
+    removed, so identity stays the single source of truth for who can do
+    what.
     """
     async with async_session_factory() as session:
         # Step 1: Sync role permissions from identity's roles into core_roles.
@@ -625,6 +628,28 @@ async def sync_rbac_from_identity() -> None:
                 "JOIN core_roles cr ON cr.tenant_id = ur.tenant_id AND cr.name = "
                 "  (SELECT r.name FROM roles r WHERE r.id = ur.role_id) "
                 "ON CONFLICT DO NOTHING"
+            )
+        )
+
+        # Step 3: Remove stale grants - rows whose (tenant, user, role, scope)
+        # no longer exist in identity's user_roles. Identity is authoritative:
+        # revocations must take effect here too. Without this, a role downgrade
+        # in IAM (identity revokes the old grant) leaves the old grant in
+        # core_user_roles forever, and every runtime check (ERP tools, the AI
+        # agent greeting) keeps seeing the stale, broader access.
+        await session.execute(
+            text(
+                "DELETE FROM core_user_roles cur "
+                "WHERE NOT EXISTS ("
+                "  SELECT 1 "
+                "  FROM user_roles ur "
+                "  JOIN roles r ON r.id = ur.role_id "
+                "  JOIN core_roles cr ON cr.tenant_id = r.tenant_id AND cr.name = r.name "
+                "  WHERE ur.tenant_id = cur.tenant_id "
+                "    AND ur.user_id = cur.user_id "
+                "    AND cr.id = cur.role_id "
+                "    AND ur.scope_id IS NOT DISTINCT FROM cur.scope_id "
+                ")"
             )
         )
 
