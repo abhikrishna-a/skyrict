@@ -11,8 +11,9 @@ were canonicalized (``erp.leave.*``) and the system role renamed to
 0031 and re-upgrade to prove the reverse round-trips idempotently and heritage
 rows survive (all in the single-role clean state), then assert collision-
 guarding (a tenant-created non-system ``employee`` role is left untouched; the
-canonical name is never created twice), and re-verify idempotency on that
-guarded state.
+canonical name is never created twice), and finally repeat the downgrade /
+re-upgrade round-trip with that collision role present, proving both roles
+survive untouched and the version stays at 0032.
 
 The test owns its scratch database and never touches the shared test database
 (``migrated_schema``): it builds, probes, and destroys the database it seeds,
@@ -175,6 +176,56 @@ async def _assert_roundtripped(url: str, tenant_id: str) -> None:
         await engine.dispose()
 
 
+async def _assert_collision_roundtripped(url: str, tenant_id: str) -> None:
+    """Post-downgrade/re-upgrade with a collision role present.
+
+    The final phase of ``test_0032_heritage_roundtrip`` runs after
+    ``_seed_collision_role``, so two roles legitimately exist: the canonical
+    ``employee_self_service`` system role (round-tripped idempotently) and the
+    tenant-created non-system ``employee`` role (untouched - the collision
+    guard holds through the reverse path too).
+    """
+    engine = create_async_engine(url, poolclass=NullPool)
+    try:
+        async with engine.connect() as conn:
+            version = (
+                await conn.execute(text("SELECT version_num FROM alembic_version"))
+            ).scalar_one()
+            assert version == "0032", f"head is {version}, expected 0032"
+
+            rows = (
+                await conn.execute(
+                    text(
+                        "SELECT name, is_system_role, permissions FROM roles "
+                        "WHERE tenant_id = :tenant_id ORDER BY is_system_role DESC, name"
+                    ),
+                    {"tenant_id": uuid.UUID(tenant_id)},
+                )
+            ).all()
+            assert len(rows) == 2, f"expected system + collision role, got {len(rows)}"
+            canonical, custom = rows
+            name, system, perms = canonical
+            assert name == _CANONICAL_EMPLOYEE_ROLE_NAME, (
+                f"0032 must rename system role to {_CANONICAL_EMPLOYEE_ROLE_NAME!r}, got {name!r}"
+            )
+            assert system, "0032 must keep the role a system role"
+            assert not set(_LEGACY_LEAVE_GRANT_KEYS) & set(perms), (
+                f"0032 must rewrite legacy grant keys, got {perms!r}"
+            )
+            assert set(_CANONICAL_LEAVE_GRANT_KEYS) <= set(perms), (
+                f"0032 must install canonical grant keys, got {perms!r}"
+            )
+            custom_name, custom_system, custom_perms = custom
+            assert custom_name == "employee" and not custom_system, (
+                f"collision role must survive untouched, got {custom!r}"
+            )
+            assert list(custom_perms) == ["custom.dashboard.view"], (
+                f"collision role permissions must be preserved, got {custom_perms!r}"
+            )
+    finally:
+        await engine.dispose()
+
+
 async def _seed_collision_role(url: str, tenant_id: str) -> None:
     """Insert a tenant-created (non-system) ``employee`` role as a guard probe."""
     engine = create_async_engine(url, poolclass=NullPool)
@@ -264,5 +315,13 @@ def test_0032_heritage_roundtrip() -> None:
         asyncio.run(_seed_collision_role(scratch_url, tenant_id))
         _run_alembic(_ALEMBIC_INI, ["upgrade", "0032"], overrides)
         asyncio.run(_assert_collision_guarded(scratch_url, tenant_id))
+
+        # Collision-guarded reverse round-trip: with the tenant-created
+        # ``employee`` role present, 0032 -> 0031 -> 0032 must still round-trip
+        # idempotently -- the canonical ``employee_self_service`` role survives
+        # and the custom ``employee`` role is left untouched (two roles total).
+        _run_alembic(_ALEMBIC_INI, ["downgrade", "0031"], overrides)
+        _run_alembic(_ALEMBIC_INI, ["upgrade", "0032"], overrides)
+        asyncio.run(_assert_collision_roundtripped(scratch_url, tenant_id))
     finally:
         asyncio.run(_drop_scratch_db(maint_dsn, dbname))
