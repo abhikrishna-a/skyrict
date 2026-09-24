@@ -637,10 +637,24 @@ async def sync_rbac_from_identity() -> None:
         # in IAM (identity revokes the old grant) leaves the old grant in
         # core_user_roles forever, and every runtime check (ERP tools, the AI
         # agent greeting) keeps seeing the stale, broader access.
+        #
+        # Scoped to identity-managed tenants: a grant is only stale-eligible
+        # when its tenant has an identity user_roles mirror - i.e. identity
+        # has made a statement about that tenant. Tenants with NO mirror rows
+        # (core tenants never provisioned through identity, or test fixtures
+        # seeding core_user_roles directly) are left untouched; DELETE-ing
+        # every grant absent from a non-authoritative mirror would strip their
+        # grants and break authorization. Identity-managed tenants always have
+        # mirror rows (the admin grant is seeded with the tenant), so real
+        # revocations still propagate.
         await session.execute(
             text(
                 "DELETE FROM core_user_roles cur "
-                "WHERE NOT EXISTS ("
+                "WHERE EXISTS ("
+                "  SELECT 1 FROM user_roles ur_own "
+                "  WHERE ur_own.tenant_id = cur.tenant_id"
+                ") "
+                "AND NOT EXISTS ("
                 "  SELECT 1 "
                 "  FROM user_roles ur "
                 "  JOIN roles r ON r.id = ur.role_id "
